@@ -6,9 +6,18 @@ Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--
 
 - **sync** (`sync.py`, via `drive.py`): lists albums and photos, downloads only what changed
   (`md5Checksum`/`modifiedTime`), and removes cache entries deleted from Drive.
-- **build** (`build.py`, `images.py`): makes content-hashed thumbnails and display images
+- **build** (`build.py`, `images.py`, `scripts.py`): compiles `src/reel/ts/` with the
+  project's local `tsc` into a temporary folder, makes content-hashed thumbnails and display images
   (WebP + JPEG), then renders Jinja2 templates into `dist/`.
-- **serve**: `dist/` is plain static files.
+- **serve**: `dist/` is plain static files. `reel serve` previews them on localhost.
+
+## Sync
+
+- Calls `get_folder(root)` first, because Drive lists an unshared folder as empty.
+- Album titles, slugs, order, and covers follow [Drive folder conventions](drive-conventions.md).
+- Downloads only files whose `md5Checksum` or `modifiedTime` changed (or that are missing
+  locally), removes originals no longer in Drive, then writes the manifest atomically. If a
+  download fails, the previous manifest is kept.
 
 ## Cache contract (sync -> build)
 
@@ -24,7 +33,7 @@ dist/
   index.html, work/index.html   album index
   <slug>/index.html             album page, "Next" wraps to the first album
   images/<hash>.webp|.jpg       thumbnails (600px wide) and display images (2000px long edge)
-  static/                       CSS
+  static/                       CSS and compiled JavaScript
   .reel-build                   marker: this directory was written by `reel build`
 ```
 
