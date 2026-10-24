@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 SHORTCUT_MIME_TYPE = "application/vnd.google-apps.shortcut"
-_FIELDS = "nextPageToken, files(id, name, mimeType, md5Checksum, modifiedTime)"
+_FILE_FIELDS = "id, name, mimeType, md5Checksum, modifiedTime"
+_FIELDS = f"nextPageToken, files({_FILE_FIELDS})"
 # googleapiclient retries rate-limit (403/429) and 5xx responses with exponential backoff.
 _NUM_RETRIES = 5
 
@@ -47,6 +48,13 @@ class DriveFile(BaseModel):
 class DriveClient(Protocol):
     """Read-only view of a Drive folder tree. Tests use an in-memory fake."""
 
+    def get_folder(self, folder_id: str) -> DriveFile:
+        """Return the folder `folder_id`, or raise `DriveError` if it is missing or unshared.
+
+        Call this on the root before listing it: Drive lists an inaccessible folder as empty.
+        """
+        ...
+
     def list_children(self, folder_id: str) -> list[DriveFile]:
         """Return every non-trashed direct child of `folder_id`, across all pages."""
         ...
@@ -62,7 +70,8 @@ def _drive_error(exc: HttpError, action: str) -> DriveError:
     hint = ""
     if status in (403, 404):
         hint = " If this is the root folder, check it is shared with the service account."
-    return DriveError(f"Drive {action} failed with status {status}: {exc.reason}.{hint}")
+    reason = str(exc.reason).rstrip(".")
+    return DriveError(f"Drive {action} failed with status {status}: {reason}.{hint}")
 
 
 class GoogleDriveClient:
@@ -83,6 +92,29 @@ class GoogleDriveClient:
             str(credentials_path), scopes=SCOPES
         )
         return cls(build("drive", "v3", credentials=credentials, cache_discovery=False))
+
+    def get_folder(self, folder_id: str) -> DriveFile:
+        """Return the folder `folder_id`, or raise `DriveError` if it is missing or unshared.
+
+        Call this on the root before listing it: Drive lists an inaccessible folder as empty.
+        """
+        try:
+            item = (
+                self._service.files()
+                .get(fileId=folder_id, fields=f"{_FILE_FIELDS}, trashed", supportsAllDrives=True)
+                .execute(num_retries=_NUM_RETRIES)
+            )
+        except HttpError as exc:
+            raise _drive_error(exc, f"lookup of folder {folder_id}") from exc
+        entry = DriveFile.model_validate(item)
+        if not entry.is_folder:
+            logger.error("Drive item %s is not a folder (mimeType=%s)", folder_id, entry.mime_type)
+            raise DriveError(f"Drive item {folder_id} is not a folder.")
+        # files.get returns trashed items, whose children list_children would filter out.
+        if item.get("trashed"):
+            logger.error("Drive folder %s is in the trash", folder_id)
+            raise DriveError(f"Drive folder {folder_id} is in the trash.")
+        return entry
 
     def list_children(self, folder_id: str) -> list[DriveFile]:
         """Return every non-trashed direct child of `folder_id`, across all pages."""
