@@ -50,6 +50,8 @@ Always use these exact commands. If one is wrong, fix it here.
 `DRIVE_ROOT_FOLDER_ID`, `SITE_TITLE`, `SITE_BASE_URL`.
 The root folder must be shared (Viewer) with the service account's email. Scope is
 `https://www.googleapis.com/auth/drive.readonly`. This project **never writes to Drive**.
+Real env vars override `.env`. VS Code can inject `.env` into terminals at startup, so after
+editing `.env`, restart the editor/session or stale values win.
 
 ## Drive folder conventions
 - Albums are the immediate subfolders of the root. Deeper nesting is ignored.
@@ -61,6 +63,8 @@ The root folder must be shared (Viewer) with the service account's email. Scope 
 - **Slugs:** from the cleaned album title; unique (suffix `-2` on collision).
 - Empty albums are not published.
 - Handle pagination (`nextPageToken`) and shared drives (`supportsAllDrives=True`).
+- Drive lists a folder the service account can't access as **empty**, not 403/404. Sync must
+  call `get_folder(root)` first so an unshared root fails loudly instead of publishing nothing.
 - Drive file and folder names are untrusted input: sanitize before using as paths or HTML.
 
 ## Image pipeline rules

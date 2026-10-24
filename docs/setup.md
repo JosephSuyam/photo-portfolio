@@ -12,3 +12,6 @@
 The app only requests the `drive.readonly` scope and never writes to Drive.
 
 A 404 or 403 on the root folder usually means it is not shared with the service account.
+
+Environment variables override `.env`. If you edit `.env` while VS Code is open, restart it:
+its terminals may still carry the old values.
