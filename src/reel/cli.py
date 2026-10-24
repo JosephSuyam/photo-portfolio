@@ -7,6 +7,12 @@ from typing import Annotated
 
 import typer
 
+from reel.build import BuildError, base_path_from_url, build_site, load_manifest
+from reel.config import load_site_settings
+
+CACHE_DIR = Path(".cache")
+DIST_DIR = Path("dist")
+
 app = typer.Typer(help="Build a static photo portfolio from a Google Drive folder.")
 
 
@@ -24,7 +30,20 @@ def sync() -> None:
 @app.command()
 def build() -> None:
     """Render the site from the local cache into dist/."""
-    _not_implemented("build")
+    settings = load_site_settings()
+    try:
+        manifest = load_manifest(CACHE_DIR / "manifest.json")
+        count = build_site(
+            manifest,
+            CACHE_DIR,
+            DIST_DIR,
+            settings.site_title,
+            base_path_from_url(settings.site_base_url),
+        )
+    except BuildError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Built {count} album{'' if count == 1 else 's'} into {DIST_DIR}/")
 
 
 @app.command()

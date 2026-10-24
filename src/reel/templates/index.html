@@ -4,7 +4,11 @@
   {% for album in albums %}
   <li>
     <a href="{{ base_path }}{{ album.slug }}/">
-      <img src="{{ album.cover_url }}" alt="{{ album.title }}" loading="lazy">
+      <picture>
+        <source srcset="{{ album.cover_webp_url }}" type="image/webp">
+        <img src="{{ album.cover_url }}" width="{{ album.cover_width }}"
+             height="{{ album.cover_height }}" alt="{{ album.title }}" loading="lazy">
+      </picture>
       <span class="album-title">{{ album.title }}</span>
     </a>
   </li>

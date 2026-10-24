@@ -13,6 +13,8 @@ service-account*.json
 # Generated / downloaded
 .cache/
 dist/
+.dist.staging/
+.dist.old/
 .tmp/
 
 # Python tooling

@@ -36,7 +36,15 @@ main { padding: 0 var(--gap) calc(var(--gap) * 2); }
   gap: var(--gap);
 }
 
-.album-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.album-grid picture { display: block; }
+
+.album-grid img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+}
 
 .album-title { display: block; margin-top: 0.5rem; color: var(--muted); }
 
