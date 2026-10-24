@@ -40,7 +40,7 @@ def test_index_template_untrusted_title_escaped() -> None:
     html = template.render(
         site_title="Site",
         base_path="/",
-        albums=[{"title": PAYLOAD, "slug": "x", "cover_url": "c.jpg"}],
+        albums=[{"title": PAYLOAD, "slug": "x", "cover": {"src": "c.jpg"}}],
     )
     assert ESCAPED in html and PAYLOAD not in html
 
@@ -459,7 +459,7 @@ def test_build_site_failed_rebuild_keeps_previous_output(cache: Path, out: Path)
 def test_build_site_index_cover_has_webp_source(cache: Path, out: Path, tmp_path: Path) -> None:
     expected = _expected(write_original(cache, "p1"), tmp_path / "scratch")
     _build([make_album("a", [make_photo("p1")])], cache, out)
-    assert f'srcset="/images/{expected.thumbnail.webp_name}"' in _read(out / "index.html")
+    assert f'srcset="/images/{expected.thumbnail.webp_name} ' in _read(out / "index.html")
 
 
 def test_build_site_unreadable_cover_falls_back_to_first_photo(
@@ -523,3 +523,74 @@ def test_build_site_write_error_raises_build_error(
     monkeypatch.setattr(shutil, "copytree", failing_copytree)
     with pytest.raises(BuildError):
         _build(_three_albums(cache), cache, out)
+
+
+def test_srcset_lists_each_url_once() -> None:
+    from reel.build import srcset
+
+    assert (
+        srcset([("/a.jpg", 600), ("/a.jpg", 600), ("/b.jpg", 2000)]) == "/a.jpg 600w, /b.jpg 2000w"
+    )
+
+
+def test_sizes_portrait_desktop_width_follows_aspect_ratio() -> None:
+    from reel.build import sizes
+    from reel.images import ImageVariant
+
+    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=1000, height=2000)
+    assert sizes(variant, height_vh=80, mobile_width_vw=80) == "(max-width: 767px) 80vw, 40vh"
+
+
+def test_build_site_index_offers_display_size_for_covers(
+    cache: Path, out: Path, tmp_path: Path
+) -> None:
+    expected = _expected(write_original(cache, "p1", size=(1200, 800)), tmp_path / "scratch")
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    assert f"/images/{expected.display.jpeg_name} 1200w" in _read(out / "index.html")
+
+
+def test_build_site_index_marks_work_nav_current(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    assert 'aria-current="page"' in _read(out / "work" / "index.html")
+
+
+def test_build_site_album_page_work_nav_not_current(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    assert 'aria-current="page"' not in _read(out / "a" / "index.html")
+
+
+def _build_with_scripts(cache: Path, out: Path, tmp_path: Path) -> None:
+    from reel.build import build_site
+    from reel.models import Manifest
+
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "site.js").write_text("console.log('hi');", encoding="utf-8")
+    build_site(Manifest(albums=_three_albums(cache)), cache, out, "Site", scripts_dir=scripts)
+
+
+def test_build_site_copies_compiled_scripts(cache: Path, out: Path, tmp_path: Path) -> None:
+    _build_with_scripts(cache, out, tmp_path)
+    assert (out / "static" / "site.js").is_file()
+
+
+def test_build_site_pages_load_compiled_scripts(cache: Path, out: Path, tmp_path: Path) -> None:
+    _build_with_scripts(cache, out, tmp_path)
+    assert '<script src="/static/site.js" defer>' in _read(out / "a" / "index.html")
+
+
+def test_build_site_without_scripts_has_no_script_tag(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    assert "<script" not in _read(out / "index.html")
+
+
+def test_base_path_from_url_space_in_path_is_percent_encoded() -> None:
+    from reel.build import base_path_from_url
+
+    assert base_path_from_url("https://x.com/my portfolio") == "/my%20portfolio/"
+
+
+def test_base_path_from_url_already_encoded_path_not_double_encoded() -> None:
+    from reel.build import base_path_from_url
+
+    assert base_path_from_url("https://x.com/my%20portfolio/") == "/my%20portfolio/"

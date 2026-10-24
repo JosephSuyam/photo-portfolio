@@ -1,17 +1,23 @@
 {% extends "base.html" %}
 {% block title %}{{ album.title }} | {{ site_title }}{% endblock %}
 {% block content %}
-<h1 class="album-heading">{{ album.title }}</h1>
-<div class="photo-stack">
+<h1 class="visually-hidden">{{ album.title }}</h1>
+<div class="photo-strip" data-horizontal-scroll>
   {% for photo in album.photos %}
-  <picture>
-    <source srcset="{{ photo.webp_url }}" type="image/webp">
-    <img src="{{ photo.jpeg_url }}" width="{{ photo.width }}" height="{{ photo.height }}"
-         alt="" loading="lazy">
-  </picture>
+  <figure class="photo">
+    <picture>
+      <source srcset="{{ photo.webp_srcset }}" sizes="{{ photo.sizes }}" type="image/webp">
+      <img src="{{ photo.src }}" srcset="{{ photo.jpeg_srcset }}" sizes="{{ photo.sizes }}"
+           width="{{ photo.width }}" height="{{ photo.height }}" alt=""
+           {% if not loop.first %}loading="lazy"{% endif %}>
+    </picture>
+  </figure>
   {% endfor %}
+  {% if next_album %}
+  <div class="next-album">
+    <p>Next</p>
+    <h2><a href="{{ base_path }}{{ next_album.slug }}/">{{ next_album.title }}</a></h2>
+  </div>
+  {% endif %}
 </div>
-{% if next_album %}
-<a class="next-album" href="{{ base_path }}{{ next_album.slug }}/">Next: {{ next_album.title }}</a>
-{% endif %}
 {% endblock %}
