@@ -62,9 +62,15 @@ def test_compile_scripts_timeout_raises_script_error(
 ) -> None:
     import subprocess
 
+    import reel.scripts
+
     def hanging_run(*args: object, **kwargs: object) -> None:
         raise subprocess.TimeoutExpired(cmd="tsc", timeout=1)
 
+    # Stand-in compiler so the test runs without `npm install`; subprocess.run never starts it.
+    stand_in_tsc = tmp_path / "tsc"
+    stand_in_tsc.write_text("", encoding="utf-8")
+    monkeypatch.setattr(reel.scripts, "TSC", stand_in_tsc)
     monkeypatch.setattr(shutil, "which", lambda _name: "node")
     monkeypatch.setattr(subprocess, "run", hanging_run)
     with pytest.raises(ScriptError, match="timed out"):
