@@ -17,8 +17,10 @@ function trackFailures(page: Page): string[] {
   const failures: string[] = [];
   page.on("pageerror", (error) => failures.push(`page error: ${error.message}`));
   page.on("console", (message) => {
-    if (message.type() === "error" && !message.text().includes("favicon")) {
-      failures.push(`console error: ${message.text()}`);
+    // Chrome's "Failed to load resource" text omits the URL; it is only in location().
+    const url = message.location().url;
+    if (message.type() === "error" && !url.endsWith("/favicon.ico")) {
+      failures.push(`console error: ${message.text()} (${url})`);
     }
   });
   page.on("response", (response) => {
