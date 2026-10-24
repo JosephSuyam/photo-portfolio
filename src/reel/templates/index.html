@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<ul class="album-grid">
+  {% for album in albums %}
+  <li>
+    <a href="{{ base_path }}{{ album.slug }}/">
+      <img src="{{ album.cover_url }}" alt="{{ album.title }}" loading="lazy">
+      <span class="album-title">{{ album.title }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

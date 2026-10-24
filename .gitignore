@@ -1,0 +1,24 @@
+# Secrets (service-account keys are usually named <project>-<hash>.json)
+.env
+service-account*.json
+*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*.json
+*.pem
+
+# Photos never belong in the repo
+*.jpg
+*.jpeg
+*.png
+*.webp
+
+# Generated / downloaded
+.cache/
+dist/
+.tmp/
+
+# Python tooling
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

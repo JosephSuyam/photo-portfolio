@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ album.title }} | {{ site_title }}{% endblock %}
+{% block content %}
+<h1 class="album-heading">{{ album.title }}</h1>
+<div class="photo-stack">
+  {% for photo in album.photos %}
+  <picture>
+    <source srcset="{{ photo.webp_url }}" type="image/webp">
+    <img src="{{ photo.jpeg_url }}" width="{{ photo.width }}" height="{{ photo.height }}"
+         alt="" loading="lazy">
+  </picture>
+  {% endfor %}
+</div>
+{% if next_album %}
+<a class="next-album" href="{{ base_path }}{{ next_album.slug }}/">Next: {{ next_album.title }}</a>
+{% endif %}
+{% endblock %}

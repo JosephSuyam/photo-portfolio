@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ site_title }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ base_path }}static/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="site-title" href="{{ base_path }}">{{ site_title }}</a>
+    <nav><a href="{{ base_path }}work/">Work</a></nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
