@@ -63,3 +63,42 @@ def test_load_settings_required_empty_treated_as_missing(tmp_path: Path) -> None
             tmp_path / "missing.env",
             environ={**REQUIRED, "DRIVE_ROOT_FOLDER_ID": ""},
         )
+
+
+def test_load_site_settings_nothing_set_uses_defaults(tmp_path: Path) -> None:
+    from reel.config import SiteSettings, load_site_settings
+
+    settings = load_site_settings(tmp_path / "missing.env", environ={})
+    assert settings == SiteSettings(site_title="Portfolio", site_base_url="http://localhost:8000")
+
+
+def test_load_site_settings_drive_settings_not_required(tmp_path: Path) -> None:
+    from reel.config import load_site_settings
+
+    settings = load_site_settings(tmp_path / "missing.env", environ={"SITE_TITLE": "Jo"})
+    assert settings.site_title == "Jo"
+
+
+def test_load_site_settings_values_read_from_env_file(tmp_path: Path) -> None:
+    from reel.config import load_site_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("SITE_BASE_URL=https://x.com/portfolio\n", encoding="utf-8")
+    settings = load_site_settings(env_file, environ={})
+    assert settings.site_base_url == "https://x.com/portfolio"
+
+
+def test_load_site_settings_environ_overrides_env_file(tmp_path: Path) -> None:
+    from reel.config import load_site_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("SITE_TITLE=From File\n", encoding="utf-8")
+    settings = load_site_settings(env_file, environ={"SITE_TITLE": "From Env"})
+    assert settings.site_title == "From Env"
+
+
+def test_load_site_settings_empty_value_uses_default(tmp_path: Path) -> None:
+    from reel.config import load_site_settings
+
+    settings = load_site_settings(tmp_path / "missing.env", environ={"SITE_TITLE": ""})
+    assert settings.site_title == "Portfolio"

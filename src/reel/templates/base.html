@@ -5,11 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ site_title }}{% endblock %}</title>
   <link rel="stylesheet" href="{{ base_path }}static/site.css">
+  {% for name in script_names %}
+  <script src="{{ base_path }}static/{{ name }}" defer></script>
+  {% endfor %}
 </head>
 <body>
   <header class="site-header">
+    <nav class="site-nav">
+      <a href="{{ base_path }}work/"{% if nav_work_current %} aria-current="page"{% endif %}>Work</a>
+    </nav>
     <a class="site-title" href="{{ base_path }}">{{ site_title }}</a>
-    <nav><a href="{{ base_path }}work/">Work</a></nav>
   </header>
   <main>
     {% block content %}{% endblock %}

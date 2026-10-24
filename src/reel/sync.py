@@ -1,4 +1,273 @@
 """Incremental sync of the Drive folder tree into `.cache/` plus `manifest.json`.
 
-Not implemented yet. See the Drive conventions and image pipeline rules in CLAUDE.md.
+Originals are downloaded only when Drive reports a new `md5Checksum` or `modifiedTime`.
+The manifest is written only after every download succeeded, and stale originals are removed
+only after that, so a failed sync leaves the previous manifest (and the site built from it)
+untouched.
 """
+
+import logging
+import re
+import unicodedata
+from collections.abc import Iterable, Sequence
+from pathlib import Path
+
+from reel.build import RESERVED_SLUGS
+from reel.drive import DriveClient, DriveFile
+from reel.models import Album, Manifest, Photo, original_path
+
+logger = logging.getLogger(__name__)
+
+SUPPORTED_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
+MANIFEST_NAME = "manifest.json"
+ORIGINALS_DIR = "originals"
+
+_DIGITS = re.compile(r"(\d+)")
+_NON_SLUG_CHARS = re.compile(r"[^a-z0-9]+")
+_FALLBACK_SLUG = "album"
+
+
+def natural_sort_key(name: str) -> tuple[str | int, ...]:
+    """Case-insensitive key that orders digit runs numerically ("img2" before "img10").
+
+    Splitting on digit runs always yields text at even positions and numbers at odd ones,
+    so keys of any two names compare without mixing `str` and `int`.
+    """
+    parts = _DIGITS.split(name.casefold())
+    return tuple(int(part) if index % 2 else part for index, part in enumerate(parts))
+
+
+def display_title(folder_name: str) -> str:
+    """Album title: the folder name as written, minus surrounding whitespace.
+
+    A numeric prefix ("01 Book I") still controls the order but is kept in the title.
+    """
+    return folder_name.strip()
+
+
+def slugify(title: str) -> str:
+    """URL- and path-safe slug: ASCII lowercase letters and digits joined by single hyphens."""
+    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
+    return _NON_SLUG_CHARS.sub("-", ascii_title.lower()).strip("-") or _FALLBACK_SLUG
+
+
+def unique_slugs(slugs: Sequence[str]) -> list[str]:
+    """Make `slugs` unique and unreserved, suffixing later duplicates with -2, -3, ...
+
+    Every input slug counts as taken up front, so a generated suffix never collides with
+    a slug that appears later in the list.
+    """
+    taken = set(RESERVED_SLUGS) | set(slugs)
+    used: set[str] = set()
+    result: list[str] = []
+    for slug in slugs:
+        candidate = slug
+        if slug in used or slug in RESERVED_SLUGS:
+            suffix = 2
+            while f"{slug}-{suffix}" in taken:
+                suffix += 1
+            candidate = f"{slug}-{suffix}"
+            taken.add(candidate)
+        used.add(candidate)
+        result.append(candidate)
+    return result
+
+
+def is_cover(name: str) -> bool:
+    """Whether `name` is an album cover file (`cover.<ext>`, any case)."""
+    stem, dot, _ = name.rpartition(".")
+    return (stem if dot else name).casefold() == "cover"
+
+
+def sync_portfolio(client: DriveClient, root_folder_id: str, cache_dir: Path) -> Manifest:
+    """Mirror the Drive portfolio under `root_folder_id` into `cache_dir` and return it.
+
+    Raises `DriveError` if the root is missing or unshared (before anything is listed) or
+    if a download fails; in both cases the previous manifest is left as it was.
+    """
+    # Drive lists an unshared folder as empty, so look the root up first to fail loudly.
+    client.get_folder(root_folder_id)
+    manifest = Manifest(albums=_read_albums(client, root_folder_id))
+    photos = _manifest_photos(manifest)
+
+    manifest_path = cache_dir / MANIFEST_NAME
+    downloaded, reused = _download_originals(
+        client, photos, _previous_photos(manifest_path), cache_dir
+    )
+    _write_manifest(manifest_path, manifest)
+    removed = _remove_unreferenced(cache_dir, {photo.file_id for photo in photos})
+
+    logger.info(
+        "Synced %d albums: %d downloaded, %d reused, %d removed",
+        len(manifest.albums),
+        downloaded,
+        reused,
+        removed,
+    )
+    return manifest
+
+
+def _drive_order(entry: DriveFile) -> tuple[object, ...]:
+    """Natural order, with the exact name and id as tie-breakers.
+
+    Drive's listing order is not stable, and names like "Travel"/"travel" or "01"/"1" tie
+    under natural order; without a tie-breaker slugs and covers could change between syncs.
+    """
+    return (natural_sort_key(entry.name), entry.name, entry.id)
+
+
+def _read_albums(client: DriveClient, root_folder_id: str) -> list[Album]:
+    folders = sorted(
+        (entry for entry in client.list_children(root_folder_id) if entry.is_folder),
+        key=_drive_order,
+    )
+    contents = [(folder, *_read_photos(client, folder)) for folder in folders]
+    published = [(folder, photos, cover) for folder, photos, cover in contents if photos]
+    titles = [display_title(folder.name) for folder, _, _ in published]
+    slugs = unique_slugs([slugify(title) for title in titles])
+    return [
+        Album(
+            folder_id=folder.id,
+            name=folder.name,
+            title=title,
+            slug=slug,
+            photos=photos,
+            cover=cover,
+        )
+        for (folder, photos, cover), title, slug in zip(published, titles, slugs, strict=True)
+    ]
+
+
+def _read_photos(client: DriveClient, folder: DriveFile) -> tuple[list[Photo], Photo | None]:
+    """The album's photos in order, and its cover file if it has one."""
+    files = sorted(
+        (entry for entry in client.list_children(folder.id) if _is_usable_photo(entry)),
+        key=_drive_order,
+    )
+    covers = [_to_photo(entry) for entry in files if is_cover(entry.name)]
+    photos = [_to_photo(entry) for entry in files if not is_cover(entry.name)]
+    for extra in covers[1:]:
+        logger.warning(
+            "Skipping %r in album %r: album already has a cover", extra.name, folder.name
+        )
+    return photos, covers[0] if covers else None
+
+
+def _is_usable_photo(entry: DriveFile) -> bool:
+    """Whether `entry` is a supported image; logs why other files are skipped."""
+    if entry.is_folder:
+        # Albums are one level deep; nested folders are ignored without a warning.
+        return False
+    if entry.mime_type not in SUPPORTED_MIME_TYPES:
+        logger.warning("Skipping %r: unsupported type %s", entry.name, entry.mime_type)
+        return False
+    try:
+        original_path(Path(), entry.id)
+    except ValueError:
+        logger.warning("Skipping %r: unsafe Drive file ID", entry.name)
+        return False
+    return True
+
+
+def _to_photo(entry: DriveFile) -> Photo:
+    return Photo(
+        file_id=entry.id,
+        name=entry.name,
+        mime_type=entry.mime_type,
+        md5_checksum=entry.md5_checksum,
+        modified_time=entry.modified_time,
+    )
+
+
+def _manifest_photos(manifest: Manifest) -> list[Photo]:
+    """Every photo and cover in `manifest`."""
+    photos: list[Photo] = []
+    for album in manifest.albums:
+        photos.extend(album.photos)
+        if album.cover is not None:
+            photos.append(album.cover)
+    return photos
+
+
+def _previous_photos(manifest_path: Path) -> dict[str, Photo]:
+    """Photos from the last successful sync by file ID; empty if there is no usable manifest."""
+    try:
+        text = manifest_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except OSError as error:
+        logger.warning("Ignoring unreadable %s: %s", manifest_path, error)
+        return {}
+    try:
+        previous = Manifest.model_validate_json(text)
+    except ValueError:
+        # Includes pydantic's ValidationError; a bad manifest just means a full download.
+        logger.warning("Ignoring invalid %s; downloading every photo again", manifest_path)
+        return {}
+    return {photo.file_id: photo for photo in _manifest_photos(previous)}
+
+
+def _is_current(photo: Photo, previous: Photo | None, dest: Path) -> bool:
+    return (
+        previous is not None
+        and previous.md5_checksum == photo.md5_checksum
+        and previous.modified_time == photo.modified_time
+        and dest.is_file()
+    )
+
+
+def _download_originals(
+    client: DriveClient,
+    photos: Iterable[Photo],
+    previous: dict[str, Photo],
+    cache_dir: Path,
+) -> tuple[int, int]:
+    """Download new or changed originals; return (downloaded, reused) counts."""
+    downloaded = reused = 0
+    seen: set[str] = set()
+    for photo in photos:
+        if photo.file_id in seen:
+            continue
+        seen.add(photo.file_id)
+        dest = original_path(cache_dir, photo.file_id)
+        if _is_current(photo, previous.get(photo.file_id), dest):
+            reused += 1
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        client.download(photo.file_id, dest)
+        downloaded += 1
+    return downloaded, reused
+
+
+def _remove_unreferenced(cache_dir: Path, referenced_ids: set[str]) -> int:
+    """Delete cached originals (and leftover `.part` files) no longer in Drive.
+
+    Runs after the new manifest is written, so a file that can't be removed (e.g. locked on
+    Windows) is only left behind, never needed; the next sync retries it.
+    """
+    originals = cache_dir / ORIGINALS_DIR
+    if not originals.is_dir():
+        return 0
+    removed = 0
+    for path in originals.iterdir():
+        if not path.is_file() or path.name in referenced_ids:
+            continue
+        try:
+            path.unlink()
+        except OSError as error:
+            logger.warning("Could not remove stale original %s: %s", path.name, error)
+            continue
+        removed += 1
+    return removed
+
+
+def _write_manifest(manifest_path: Path, manifest: Manifest) -> None:
+    """Write via a temp file and rename so readers never see a half-written manifest."""
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = manifest_path.with_name(f"{manifest_path.name}.tmp")
+    try:
+        temp_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+        temp_path.replace(manifest_path)
+    except BaseException:
+        temp_path.unlink(missing_ok=True)
+        raise

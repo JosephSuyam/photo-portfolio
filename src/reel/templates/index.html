@@ -1,10 +1,18 @@
 {% extends "base.html" %}
+{% set nav_work_current = true %}
 {% block content %}
-<ul class="album-grid">
+<h1 class="visually-hidden">{{ site_title }}</h1>
+<ul class="album-strip" data-horizontal-scroll>
   {% for album in albums %}
-  <li>
+  <li class="album-tile">
     <a href="{{ base_path }}{{ album.slug }}/">
-      <img src="{{ album.cover_url }}" alt="{{ album.title }}" loading="lazy">
+      <picture>
+        <source srcset="{{ album.cover.webp_srcset }}" sizes="{{ album.cover.sizes }}" type="image/webp">
+        <img src="{{ album.cover.src }}" srcset="{{ album.cover.jpeg_srcset }}"
+             sizes="{{ album.cover.sizes }}" width="{{ album.cover.width }}"
+             height="{{ album.cover.height }}" alt=""
+             {% if not loop.first %}loading="lazy"{% endif %}>
+      </picture>
       <span class="album-title">{{ album.title }}</span>
     </a>
   </li>
