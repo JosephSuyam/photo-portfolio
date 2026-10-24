@@ -11,13 +11,18 @@ class ConfigError(Exception):
     """Raised when required settings are missing."""
 
 
-class Settings(BaseModel):
+class SiteSettings(BaseModel):
+    """Configuration needed to render the site; no Drive access required."""
+
+    site_title: str = "Portfolio"
+    site_base_url: str = "http://localhost:8000"
+
+
+class Settings(SiteSettings):
     """Runtime configuration for sync and build."""
 
     credentials_path: Path
     root_folder_id: str
-    site_title: str = "Portfolio"
-    site_base_url: str = "http://localhost:8000"
 
 
 def parse_env_file(text: str) -> dict[str, str]:
@@ -42,8 +47,7 @@ def load_settings(
     env_file: Path = Path(".env"), environ: Mapping[str, str] | None = None
 ) -> Settings:
     """Build settings from `env_file`, with real environment variables taking precedence."""
-    values = parse_env_file(env_file.read_text(encoding="utf-8")) if env_file.is_file() else {}
-    values.update(os.environ if environ is None else environ)
+    values = _merged_values(env_file, environ)
 
     # Report every missing name at once, never the values (they may be secrets).
     required = ("GOOGLE_APPLICATION_CREDENTIALS", "DRIVE_ROOT_FOLDER_ID")
@@ -51,12 +55,30 @@ def load_settings(
     if missing:
         raise ConfigError(f"Missing required settings: {', '.join(missing)}. See .env.example.")
 
+    return Settings(
+        credentials_path=Path(values["GOOGLE_APPLICATION_CREDENTIALS"]),
+        root_folder_id=values["DRIVE_ROOT_FOLDER_ID"],
+        **_site_values(values),
+    )
+
+
+def load_site_settings(
+    env_file: Path = Path(".env"), environ: Mapping[str, str] | None = None
+) -> SiteSettings:
+    """Site settings from `env_file` and the environment; Drive settings are not required."""
+    return SiteSettings(**_site_values(_merged_values(env_file, environ)))
+
+
+def _merged_values(env_file: Path, environ: Mapping[str, str] | None) -> dict[str, str]:
+    values = parse_env_file(env_file.read_text(encoding="utf-8")) if env_file.is_file() else {}
+    values.update(os.environ if environ is None else environ)
+    return values
+
+
+def _site_values(values: Mapping[str, str]) -> dict[str, str]:
+    # Empty values mean "unset" so the model defaults apply.
     optional = {
         "site_title": values.get("SITE_TITLE"),
         "site_base_url": values.get("SITE_BASE_URL"),
     }
-    return Settings(
-        credentials_path=Path(values["GOOGLE_APPLICATION_CREDENTIALS"]),
-        root_folder_id=values["DRIVE_ROOT_FOLDER_ID"],
-        **{key: value for key, value in optional.items() if value},
-    )
+    return {key: value for key, value in optional.items() if value}
