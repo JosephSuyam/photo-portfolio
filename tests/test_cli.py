@@ -25,6 +25,7 @@ def site_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("SITE_TITLE", raising=False)
     monkeypatch.delenv("SITE_BASE_URL", raising=False)
+    monkeypatch.delenv("CONTACT_FORM_URL", raising=False)
     return tmp_path
 
 
@@ -193,3 +194,86 @@ def test_cli_build_without_node_builds_without_script(
     monkeypatch.setattr(reel.cli, "compile_scripts", no_node)
     result = runner.invoke(app, ["build"])
     assert result.exit_code == 0 and "Building without the site script" in result.output
+
+
+FORM_URL = "https://forms.example.test/f/reel"
+INVALID_FORM_URL = "http://forms.example.test/f/reel"
+
+
+def test_cli_build_invalid_contact_form_url_exits_with_error(
+    site_cwd: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_manifest(site_cwd)
+    monkeypatch.setenv("CONTACT_FORM_URL", INVALID_FORM_URL)
+    result = runner.invoke(app, ["build"])
+    assert result.exit_code == 1
+
+
+def test_cli_build_invalid_contact_form_url_prints_config_error(
+    site_cwd: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_manifest(site_cwd)
+    monkeypatch.setenv("CONTACT_FORM_URL", INVALID_FORM_URL)
+    result = runner.invoke(app, ["build"])
+    assert "CONTACT_FORM_URL must be an https:// URL." in result.output
+
+
+def test_cli_build_invalid_contact_form_url_no_traceback(
+    site_cwd: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_manifest(site_cwd)
+    monkeypatch.setenv("CONTACT_FORM_URL", INVALID_FORM_URL)
+    result = runner.invoke(app, ["build"])
+    assert isinstance(result.exception, SystemExit)
+
+
+def test_cli_build_invalid_contact_form_url_does_not_echo_value(
+    site_cwd: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_manifest(site_cwd)
+    monkeypatch.setenv("CONTACT_FORM_URL", INVALID_FORM_URL)
+    result = runner.invoke(app, ["build"])
+    assert "forms.example.test" not in result.output
+
+
+def test_cli_build_invalid_contact_form_url_writes_no_dist(
+    site_cwd: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_manifest(site_cwd)
+    monkeypatch.setenv("CONTACT_FORM_URL", INVALID_FORM_URL)
+    runner.invoke(app, ["build"])
+    assert not (site_cwd / "dist").exists()
+
+
+def _record_build_site(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    """Replace `build_site` and `compile_scripts` in the CLI; return the build_site kwargs."""
+    import reel.cli
+
+    calls: dict[str, object] = {}
+
+    def fake_build_site(*args: object, **kwargs: object) -> int:
+        calls.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(reel.cli, "build_site", fake_build_site)
+    monkeypatch.setattr(reel.cli, "compile_scripts", lambda _out_dir: None)
+    return calls
+
+
+def test_cli_build_valid_contact_form_url_passed_to_build_site(
+    site_cwd: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_manifest(site_cwd)
+    monkeypatch.setenv("CONTACT_FORM_URL", FORM_URL)
+    calls = _record_build_site(monkeypatch)
+    runner.invoke(app, ["build"])
+    assert calls.get("contact_form_url") == FORM_URL
+
+
+def test_cli_build_unset_contact_form_url_passes_none(
+    site_cwd: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_manifest(site_cwd)
+    calls = _record_build_site(monkeypatch)
+    runner.invoke(app, ["build"])
+    assert "contact_form_url" in calls and calls["contact_form_url"] is None

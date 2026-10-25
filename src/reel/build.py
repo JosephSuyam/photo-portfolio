@@ -9,7 +9,7 @@ import logging
 import math
 import re
 import shutil
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from fractions import Fraction
@@ -20,11 +20,12 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from pydantic import ValidationError
 
 from reel.images import ImageError, ImageVariant, ProcessedPhoto, process_photo
-from reel.models import Album, Manifest, Photo, original_path
+from reel.models import Album, Manifest, Photo, TextFile, original_path
+from reel.pages import AboutPage, ContactPage, parse_about, parse_contact, read_page_text
 
 logger = logging.getLogger(__name__)
 
-RESERVED_SLUGS = frozenset({"work", "static", "images"})
+RESERVED_SLUGS = frozenset({"work", "static", "images", "about", "contact"})
 BUILD_MARKER = ".reel-build"
 IMAGES_DIR = "images"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -224,20 +225,38 @@ def build_site(
     site_title: str,
     base_path: str = "/",
     scripts_dir: Path | None = None,
+    contact_form_url: str | None = None,
 ) -> int:
     """Render `manifest` into `out_dir` and return the number of published albums.
 
     JavaScript files in `scripts_dir` (compiled from `src/reel/ts/`) are copied to `static/`
     and loaded on every page. Without them the site still works, minus the enhancements.
+    About and Contact pages are written only when their text files are usable; the Contact
+    page gets a form posting to `contact_form_url` when one is given.
     """
     validate_slugs(manifest.albums)
+    about = _load_page(manifest.about, cache_dir, parse_about)
+    contact = _load_page(manifest.contact, cache_dir, parse_contact)
+    if contact_form_url and contact is None:
+        logger.warning(
+            "CONTACT_FORM_URL is set but there is no usable contact.json; the form is not shown."
+        )
     scripts = sorted(scripts_dir.glob("*.js")) if scripts_dir else []
     _ensure_replaceable(out_dir)
     staging = staging_dir_for(out_dir)
     try:
         _remove(staging)
         published = _publish_albums(manifest.albums, cache_dir, staging / IMAGES_DIR)
-        _render_site(published, staging, site_title, base_path, [s.name for s in scripts])
+        _render_site(
+            published,
+            staging,
+            site_title,
+            base_path,
+            [s.name for s in scripts],
+            about=about,
+            contact=contact,
+            contact_form_url=contact_form_url,
+        )
         shutil.copytree(STATIC_DIR, staging / "static")
         for script in scripts:
             shutil.copy2(script, staging / "static" / script.name)
@@ -333,12 +352,37 @@ def _process(
         return None
 
 
+def _load_page[T](
+    text_file: TextFile | None, cache_dir: Path, parse: Callable[[str, str], T | None]
+) -> T | None:
+    """Parsed page from the cached text file; None if there is none or it is unusable."""
+    if text_file is None:
+        return None
+    try:
+        source = original_path(cache_dir, text_file.file_id)
+    except ValueError as error:
+        raise BuildError(f"{text_file.name!r}: {error}") from error
+    if not source.is_file():
+        raise BuildError(
+            f"{text_file.name!r} is missing from {source.parent}. Run `reel sync` again."
+        )
+    try:
+        text = read_page_text(source, text_file.name)
+    except OSError as error:
+        raise BuildError(f"Cannot read {text_file.name!r}: {error}") from error
+    return None if text is None else parse(text, text_file.name)
+
+
 def _render_site(
     albums: Sequence[PublishedAlbum],
     out_dir: Path,
     site_title: str,
     base_path: str,
     script_names: Sequence[str],
+    *,
+    about: AboutPage | None,
+    contact: ContactPage | None,
+    contact_form_url: str | None,
 ) -> None:
     environment = make_environment()
     common = {
@@ -346,6 +390,8 @@ def _render_site(
         "base_path": base_path,
         "script_names": script_names,
         "year": date.today().year,
+        "about_page": about is not None,
+        "contact_page": contact is not None,
     }
 
     index_html = environment.get_template("index.html").render(
@@ -365,6 +411,15 @@ def _render_site(
             next_album=_link(albums[next_index]) if next_index is not None else None,
         )
         _write_page(out_dir / album.slug / "index.html", html)
+
+    if about is not None:
+        html = environment.get_template("about.html").render(**common, about=about)
+        _write_page(out_dir / "about" / "index.html", html)
+    if contact is not None:
+        html = environment.get_template("contact.html").render(
+            **common, contact=contact, contact_form_url=contact_form_url
+        )
+        _write_page(out_dir / "contact" / "index.html", html)
 
 
 def _link(album: PublishedAlbum) -> dict[str, str]:

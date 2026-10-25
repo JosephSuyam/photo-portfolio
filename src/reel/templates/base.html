@@ -17,6 +17,8 @@
     <a class="site-title" href="{{ base_path }}">{{ site_title }}</a>
     <nav class="site-nav">
       <a href="{{ base_path }}work/"{% if nav_work_current %} aria-current="page"{% endif %}>Work</a>
+      {% if about_page %}<a href="{{ base_path }}about/"{% if nav_about_current %} aria-current="page"{% endif %}>About</a>{% endif %}
+      {% if contact_page %}<a href="{{ base_path }}contact/"{% if nav_contact_current %} aria-current="page"{% endif %}>Contact</a>{% endif %}
       {% if script_names %}
       <button type="button" class="theme-toggle" hidden aria-label="Switch to dark mode">
         <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" fill="currentColor"/></svg>

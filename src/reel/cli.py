@@ -63,8 +63,8 @@ def sync() -> None:
 @app.command()
 def build() -> None:
     """Render the site from the local cache into dist/."""
-    settings = load_site_settings()
     try:
+        settings = load_site_settings()
         manifest = load_manifest(CACHE_DIR / "manifest.json")
         with tempfile.TemporaryDirectory(prefix="reel-scripts-") as temp_dir:
             scripts_dir: Path | None = Path(temp_dir)
@@ -80,8 +80,9 @@ def build() -> None:
                 settings.site_title,
                 base_path_from_url(settings.site_base_url),
                 scripts_dir=scripts_dir,
+                contact_form_url=settings.contact_form_url,
             )
-    except (BuildError, ScriptError) as error:
+    except (BuildError, ConfigError, ScriptError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error
     typer.echo(f"Built {count} album{'' if count == 1 else 's'} into {DIST_DIR}/")

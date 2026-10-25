@@ -14,17 +14,22 @@ from pathlib import Path
 
 from reel.build import RESERVED_SLUGS
 from reel.drive import DriveClient, DriveFile
-from reel.models import Album, Manifest, Photo, original_path
+from reel.models import Album, Manifest, Photo, TextFile, original_path
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
+ABOUT_NAME = "about.json"
+CONTACT_NAME = "contact.json"
 MANIFEST_NAME = "manifest.json"
 ORIGINALS_DIR = "originals"
 
 _DIGITS = re.compile(r"(\d+)")
 _NON_SLUG_CHARS = re.compile(r"[^a-z0-9]+")
 _FALLBACK_SLUG = "album"
+_GOOGLE_APPS_MIME_PREFIX = "application/vnd.google-apps."
+
+type Original = Photo | TextFile
 
 
 def natural_sort_key(name: str) -> tuple[str | int, ...]:
@@ -87,15 +92,20 @@ def sync_portfolio(client: DriveClient, root_folder_id: str, cache_dir: Path) ->
     """
     # Drive lists an unshared folder as empty, so look the root up first to fail loudly.
     client.get_folder(root_folder_id)
-    manifest = Manifest(albums=_read_albums(client, root_folder_id))
-    photos = _manifest_photos(manifest)
+    root_entries = client.list_children(root_folder_id)
+    manifest = Manifest(
+        albums=_read_albums(client, root_entries),
+        about=_find_text_file(root_entries, ABOUT_NAME),
+        contact=_find_text_file(root_entries, CONTACT_NAME),
+    )
+    originals = _manifest_originals(manifest)
 
     manifest_path = cache_dir / MANIFEST_NAME
     downloaded, reused = _download_originals(
-        client, photos, _previous_photos(manifest_path), cache_dir
+        client, originals, _previous_originals(manifest_path), cache_dir
     )
     _write_manifest(manifest_path, manifest)
-    removed = _remove_unreferenced(cache_dir, {photo.file_id for photo in photos})
+    removed = _remove_unreferenced(cache_dir, {original.file_id for original in originals})
 
     logger.info(
         "Synced %d albums: %d downloaded, %d reused, %d removed",
@@ -116,11 +126,8 @@ def _drive_order(entry: DriveFile) -> tuple[object, ...]:
     return (natural_sort_key(entry.name), entry.name, entry.id)
 
 
-def _read_albums(client: DriveClient, root_folder_id: str) -> list[Album]:
-    folders = sorted(
-        (entry for entry in client.list_children(root_folder_id) if entry.is_folder),
-        key=_drive_order,
-    )
+def _read_albums(client: DriveClient, root_entries: Sequence[DriveFile]) -> list[Album]:
+    folders = sorted((entry for entry in root_entries if entry.is_folder), key=_drive_order)
     contents = [(folder, *_read_photos(client, folder)) for folder in folders]
     published = [(folder, photos, cover) for folder, photos, cover in contents if photos]
     titles = [display_title(folder.name) for folder, _, _ in published]
@@ -169,6 +176,51 @@ def _is_usable_photo(entry: DriveFile) -> bool:
     return True
 
 
+def _find_text_file(root_entries: Sequence[DriveFile], page_name: str) -> TextFile | None:
+    """The root file named `page_name` (any case), or None; warns about unusable ones."""
+    matches = sorted(
+        (entry for entry in root_entries if entry.name.strip().casefold() == page_name),
+        key=_drive_order,
+    )
+    usable = [entry for entry in matches if _is_usable_page_file(entry)]
+    for extra in usable[1:]:
+        logger.warning("Skipping %r: using an earlier %s instead", extra.name, page_name)
+    if not usable:
+        return None
+    first = usable[0]
+    return TextFile(
+        file_id=first.id,
+        name=first.name,
+        mime_type=first.mime_type,
+        md5_checksum=first.md5_checksum,
+        modified_time=first.modified_time,
+    )
+
+
+def _is_usable_page_file(entry: DriveFile) -> bool:
+    """Whether `entry` can be downloaded as-is; logs why others are skipped.
+
+    Matching is by name only: Drive labels .json files as application/json, text/plain, or
+    application/octet-stream depending on how they were uploaded.
+    """
+    if entry.is_folder or entry.is_shortcut:
+        logger.warning("Skipping %r: not a file", entry.name)
+        return False
+    if entry.mime_type.startswith(_GOOGLE_APPS_MIME_PREFIX):
+        logger.warning(
+            "Skipping %r: Google Drive converted it (%s); upload it with conversion turned off",
+            entry.name,
+            entry.mime_type,
+        )
+        return False
+    try:
+        original_path(Path(), entry.id)
+    except ValueError:
+        logger.warning("Skipping %r: unsafe Drive file ID", entry.name)
+        return False
+    return True
+
+
 def _to_photo(entry: DriveFile) -> Photo:
     return Photo(
         file_id=entry.id,
@@ -189,8 +241,14 @@ def _manifest_photos(manifest: Manifest) -> list[Photo]:
     return photos
 
 
-def _previous_photos(manifest_path: Path) -> dict[str, Photo]:
-    """Photos from the last successful sync by file ID; empty if there is no usable manifest."""
+def _manifest_originals(manifest: Manifest) -> list[Original]:
+    """Every file in `manifest` that has an original in the cache."""
+    texts = [text for text in (manifest.about, manifest.contact) if text is not None]
+    return [*_manifest_photos(manifest), *texts]
+
+
+def _previous_originals(manifest_path: Path) -> dict[str, Original]:
+    """Files from the last successful sync by file ID; empty if there is no usable manifest."""
     try:
         text = manifest_path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -202,39 +260,39 @@ def _previous_photos(manifest_path: Path) -> dict[str, Photo]:
         previous = Manifest.model_validate_json(text)
     except ValueError:
         # Includes pydantic's ValidationError; a bad manifest just means a full download.
-        logger.warning("Ignoring invalid %s; downloading every photo again", manifest_path)
+        logger.warning("Ignoring invalid %s; downloading every file again", manifest_path)
         return {}
-    return {photo.file_id: photo for photo in _manifest_photos(previous)}
+    return {original.file_id: original for original in _manifest_originals(previous)}
 
 
-def _is_current(photo: Photo, previous: Photo | None, dest: Path) -> bool:
+def _is_current(original: Original, previous: Original | None, dest: Path) -> bool:
     return (
         previous is not None
-        and previous.md5_checksum == photo.md5_checksum
-        and previous.modified_time == photo.modified_time
+        and previous.md5_checksum == original.md5_checksum
+        and previous.modified_time == original.modified_time
         and dest.is_file()
     )
 
 
 def _download_originals(
     client: DriveClient,
-    photos: Iterable[Photo],
-    previous: dict[str, Photo],
+    originals: Iterable[Original],
+    previous: dict[str, Original],
     cache_dir: Path,
 ) -> tuple[int, int]:
     """Download new or changed originals; return (downloaded, reused) counts."""
     downloaded = reused = 0
     seen: set[str] = set()
-    for photo in photos:
-        if photo.file_id in seen:
+    for original in originals:
+        if original.file_id in seen:
             continue
-        seen.add(photo.file_id)
-        dest = original_path(cache_dir, photo.file_id)
-        if _is_current(photo, previous.get(photo.file_id), dest):
+        seen.add(original.file_id)
+        dest = original_path(cache_dir, original.file_id)
+        if _is_current(original, previous.get(original.file_id), dest):
             reused += 1
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
-        client.download(photo.file_id, dest)
+        client.download(original.file_id, dest)
         downloaded += 1
     return downloaded, reused
 

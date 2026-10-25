@@ -2,7 +2,7 @@
 
 ## Project
 A photographer portfolio modeled on https://reel.format.com/, generated from a Google Drive folder: root = portfolio, each **subfolder = one album**, each **image = a photo**.
-- Pages: `/` and `/work/` (album index: first album featured, the rest as cover cards), `/<album-slug>/` (title, photo mosaic with lightbox, Previous/Next albums). Light/dark theme toggle. Bio, Blog, Contact, client proofing: out of scope until asked.
+- Pages: `/` and `/work/` (album index: first album featured, the rest as cover cards), `/<album-slug>/` (title, photo mosaic with lightbox, Previous/Next albums). `/about/` and `/contact/` (from root `about.json` / `contact.json`, omitted when absent; samples in `docs/examples/`). Light/dark theme toggle. Blog, client proofing: out of scope until asked.
 - Pipeline: `sync` (Drive -> `.cache/` + `manifest.json`) -> `build` (images, Jinja2, compiled TypeScript -> `dist/`) -> `serve`/deploy (static files). Drive is never called at page-view time and Drive links never appear in output (they expire and must not be public).
 - Stack: Python 3.12+ via `uv` (google-api-python-client, google-auth, Pillow, Jinja2, typer, pydantic v2, ruff, mypy, pytest); npm for TypeScript 7 (tsconfig needs `rootDir`) and Playwright (runs on the installed Edge).
 - Layout: `src/reel/` (`drive.py` is the only module that talks to Google; `ts/` site script), `tests/` mirrors it (`FakeDriveClient` in `tests/fixtures/`), `e2e/` Playwright + fixture site (generated images, no Drive), `docs/`.
@@ -15,11 +15,11 @@ A photographer portfolio modeled on https://reel.format.com/, generated from a G
 - **Full check** (what "done" means): `uv run ruff check . && uv run mypy src && uv run pytest && npm run typecheck && npm run test:e2e`
 
 ## Configuration
-`.env` (never committed; shape in `.env.example`): `GOOGLE_APPLICATION_CREDENTIALS`, `DRIVE_ROOT_FOLDER_ID`, `SITE_TITLE`, `SITE_BASE_URL`. Real env vars override it; VS Code injects `.env` at startup, so restart it after edits. Root folder shared (Viewer) with the service account; scope `drive.readonly`. The path in `SITE_BASE_URL` becomes the site's base path (e.g. `/portfolio/`).
+`.env` (never committed; shape in `.env.example`): `GOOGLE_APPLICATION_CREDENTIALS`, `DRIVE_ROOT_FOLDER_ID`, `SITE_TITLE`, `SITE_BASE_URL`, optional `CONTACT_FORM_URL` (https form endpoint; unset = no form). Real env vars override it; VS Code injects `.env` at startup, so restart it after edits. Root folder shared (Viewer) with the service account; scope `drive.readonly`. The path in `SITE_BASE_URL` becomes the site's base path (e.g. `/portfolio/`).
 
 ## Drive conventions
 - Albums: immediate subfolders of the root, natural sort by name ("Book 2" before "Book 10"); a numeric prefix (`01 Book I`) forces order. Deeper nesting ignored; empty albums unpublished.
-- Title: folder name as written (trimmed). Slug from the title (`01-book-i`), unique (`-2`), never `work`, `static`, or `images`.
+- Title: folder name as written (trimmed). Slug from the title (`01-book-i`), unique (`-2`), never `work`, `static`, `images`, `about`, or `contact`.
 - Photos: JPEG, PNG, WebP, natural sort by filename; other files and shortcuts skipped with a warning. Cover: a `cover.*` file (not shown among photos), else the first photo.
 - Drive lists an unshared folder as **empty**, so sync calls `get_folder(root)` first. Handle pagination and shared drives (`supportsAllDrives=True`). Names and ids are untrusted: sanitize.
 
@@ -32,7 +32,7 @@ A photographer portfolio modeled on https://reel.format.com/, generated from a G
 - `reel build` compiles `src/reel/ts/` into `dist/static/`; compiled JS is never committed. Without Node it warns and builds without the script.
 
 ## How we work
-The main session plans, delegates, verifies, and summarizes; only it delegates. Agents: `implementer` (code), `test-writer` (pytest + Playwright), `debugger`, `code-reviewer`, `doc-writer`; skills: `orchestrate` (runs a whole task through this workflow: `/orchestrate <task>`), `run-tests` (Full check), `preview-site` (screenshots). Delegate large or noisy work with goal, paths, constraints, and output format; do small edits yourself.
+The `orchestrator` agent (`claude --agent orchestrator`, or `/orchestrate <task>` from any session) plans, delegates, verifies, and summarizes; only it delegates (other agents have no Agent tool). Agents: `implementer` (code), `test-writer` (pytest + Playwright), `debugger`, `code-reviewer`, `doc-writer`; skills: `run-tests` (Full check), `preview-site` (screenshots). Delegate large or noisy work with goal, paths, constraints, and output format; do small edits yourself.
 
 1. Understand; ask if ambiguous; plan briefly for 3+ files or a public interface.
 2. Tests first (bug fixes start with a failing test), then the smallest change that works.

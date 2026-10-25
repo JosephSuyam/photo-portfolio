@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% set nav_contact_current = true %}
+{% set page_class = "page-text" %}
+{% block title %}Contact | {{ site_title }}{% endblock %}
+{% block content %}
+<h1 class="page-heading">Contact</h1>
+{% if contact.email %}
+<a class="contact-email" href="mailto:{{ contact.email }}">{{ contact.email }}</a>
+{% endif %}
+{% if contact.entries %}
+<ul class="contact-facts">
+  {% for entry in contact.entries %}
+  <li><span class="label">{{ entry.label }}</span><span class="contact-value">{% if entry.href %}<a href="{{ entry.href }}">{{ entry.text }}</a>{% else %}{{ entry.text }}{% endif %}</span></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% if contact_form_url %}
+<section class="contact-form-section" aria-labelledby="contact-form-heading">
+  <h2 id="contact-form-heading" class="section-heading">Send a message</h2>
+  <form class="contact-form" action="{{ contact_form_url }}" method="post">
+    <label><span class="label">Name</span><input name="name" autocomplete="name" required></label>
+    <label><span class="label">Email</span><input name="email" type="email" autocomplete="email" required></label>
+    <label><span class="label">Message</span><textarea name="message" rows="6" required></textarea></label>
+    <div class="form-trap" aria-hidden="true"><label>Leave this field empty <input name="_gotcha" tabindex="-1" autocomplete="off"></label></div>
+    <button type="submit">Send message</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

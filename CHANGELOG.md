@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- About and Contact pages (`/about/`, `/contact/`) from optional `about.json` and
+  `contact.json` files in the Drive root (samples in `docs/examples/`). About: a large
+  `lede`, then `paragraphs`. Contact: the `email` shown large, then `details` as labelled
+  entries; `http(s)://` values and email addresses become links. A missing file leaves out
+  the page and its nav link; invalid JSON or a wrong shape skips the page with a warning
+  naming the field. Album folders named "About" or "Contact" now get `about-2` /
+  `contact-2`.
+- Optional `CONTACT_FORM_URL` (https only) adds a "Send a message" form that posts to a form
+  service such as Formspree. Unset, the Contact page shows links only.
+- Header nav: "Work", then "About" and "Contact" when those pages exist. On phones the nav
+  wraps below the site title instead of the title breaking. The footer stays at the bottom
+  of short pages.
 - "Editorial Light" redesign of the whole site: a light page with serif headlines. Dark mode
   follows the OS setting, or a header toggle that is remembered in this browser and applied
   before the page paints. Without JavaScript the OS setting applies and the toggle is hidden.

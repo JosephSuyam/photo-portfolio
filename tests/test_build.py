@@ -17,6 +17,7 @@ from tests.fixtures.albums import (
     write_original,
 )
 from tests.fixtures.html import Element, parse_html
+from tests.fixtures.pages import make_text_file, write_text_original
 
 if TYPE_CHECKING:
     from reel.images import ProcessedPhoto
@@ -421,10 +422,10 @@ def test_build_site_traversal_slug_writes_nothing_outside_out(cache: Path, out: 
 def test_reserved_slugs_match_site_paths() -> None:
     from reel.build import RESERVED_SLUGS
 
-    assert frozenset({"work", "static", "images"}) == RESERVED_SLUGS
+    assert frozenset({"work", "static", "images", "about", "contact"}) == RESERVED_SLUGS
 
 
-@pytest.mark.parametrize("slug", ["work", "static", "images"])
+@pytest.mark.parametrize("slug", ["work", "static", "images", "about", "contact"])
 def test_build_site_reserved_slug_raises_build_error(cache: Path, out: Path, slug: str) -> None:
     from reel.build import BuildError
 
@@ -1344,3 +1345,650 @@ def test_build_site_with_scripts_stored_theme_applied_before_stylesheet(
         or (element.tag == "link" and element.attrs.get("rel") == "stylesheet")
     ]
     assert order[:2] == ["theme", "stylesheet"]
+
+
+# build_site: about and contact pages
+
+
+def _about_json(lede: object, *paragraphs: object) -> str:
+    return json.dumps({"lede": lede, "paragraphs": list(paragraphs)})
+
+
+def _contact_json(email: str | None, *details: tuple[str, str]) -> str:
+    return json.dumps(
+        {"email": email, "details": [{"label": label, "value": value} for label, value in details]}
+    )
+
+
+ABOUT_LEDE = "I photograph quiet streets."
+ABOUT_PARAGRAPHS = ["Mostly at night, on film.", "Prints on request."]
+ABOUT_TEXT = _about_json(ABOUT_LEDE, "Mostly at night,\non film.", "Prints on request.")
+CONTACT_TEXT = _contact_json(
+    "hello@example.com",
+    ("Instagram", "https://instagram.com/me/"),
+    ("Based in", "Lisbon"),
+)
+UNPARSEABLE = "Email: hello@example.com\nnot JSON at all"
+FORM_URL = "https://forms.example.test/f/reel"
+ALL_PAGES = [
+    "index.html",
+    "work/index.html",
+    "a/index.html",
+    "about/index.html",
+    "contact/index.html",
+]
+
+
+def _build_pages(
+    cache: Path,
+    out: Path,
+    about: str | bytes | None = ABOUT_TEXT,
+    contact: str | bytes | None = CONTACT_TEXT,
+    contact_form_url: str | None = None,
+    base_path: str = "/",
+    albums: list[Album] | None = None,
+) -> int:
+    """Build three albums plus the given about.json / contact.json texts (None = not in Drive)."""
+    from reel.build import build_site
+    from reel.models import Manifest
+
+    about_file = contact_file = None
+    if about is not None:
+        write_text_original(cache, "t-about", about)
+        about_file = make_text_file("t-about", "about.json")
+    if contact is not None:
+        write_text_original(cache, "t-contact", contact)
+        contact_file = make_text_file("t-contact", "contact.json")
+    manifest = Manifest(
+        albums=_three_albums(cache) if albums is None else albums,
+        about=about_file,
+        contact=contact_file,
+    )
+    return build_site(manifest, cache, out, "Site", base_path, contact_form_url=contact_form_url)
+
+
+def _nav_links(out: Path, page: str) -> list[Element]:
+    return _one(_page(out / page), "header.site-header nav.site-nav").find_all("a")
+
+
+def _nav_texts(out: Path, page: str) -> list[str]:
+    return [link.text() for link in _nav_links(out, page)]
+
+
+def _current_nav_texts(out: Path, page: str) -> list[str]:
+    return [
+        link.text() for link in _nav_links(out, page) if link.attrs.get("aria-current") == "page"
+    ]
+
+
+def _form(out: Path) -> Element:
+    return _one(_page(out / "contact" / "index.html"), "form.contact-form")
+
+
+def _form_field(out: Path, name: str) -> Element:
+    fields = [
+        element
+        for element in _form(out).descendants()
+        if element.tag in ("input", "textarea") and element.attrs.get("name") == name
+    ]
+    assert len(fields) == 1, f"expected exactly one field named {name!r}, found {len(fields)}"
+    return fields[0]
+
+
+def _facts(out: Path) -> list[tuple[str, str, str | None]]:
+    """(label, value text, link href or None) for each `.contact-facts` entry."""
+    items = _one(_page(out / "contact" / "index.html"), "ul.contact-facts").find_all("li")
+    facts = []
+    for item in items:
+        value = _one(item, "span.contact-value")
+        link = value.find("a")
+        facts.append(
+            (
+                _one(item, "span.label").text(),
+                value.text(),
+                link.attrs.get("href") if link else None,
+            )
+        )
+    return facts
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_text_page_present_writes_page(cache: Path, out: Path, page: str) -> None:
+    _build_pages(cache, out)
+    assert (out / page / "index.html").is_file()
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_text_page_absent_writes_no_page(cache: Path, out: Path, page: str) -> None:
+    _build_pages(cache, out, about=None, contact=None)
+    assert not (out / page).exists()
+
+
+def test_build_site_only_contact_present_writes_no_about_page(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, about=None)
+    assert not (out / "about").exists()
+
+
+def test_build_site_text_pages_do_not_change_album_count(cache: Path, out: Path) -> None:
+    assert _build_pages(cache, out) == 3
+
+
+def test_build_site_text_pages_written_without_albums(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, albums=[])
+    assert (out / "about" / "index.html").is_file()
+
+
+def test_build_site_text_page_removed_from_manifest_removed_on_rebuild(
+    cache: Path, out: Path
+) -> None:
+    _build_pages(cache, out)
+    _build_pages(cache, out, about=None)
+    assert not (out / "about").exists()
+
+
+# build_site: navigation
+
+
+@pytest.mark.parametrize("page", ALL_PAGES)
+def test_build_site_both_text_pages_nav_lists_work_about_contact(
+    cache: Path, out: Path, page: str
+) -> None:
+    _build_pages(cache, out)
+    assert _nav_texts(out, page) == ["Work", "About", "Contact"]
+
+
+@pytest.mark.parametrize("page", ["index.html", "a/index.html", "contact/index.html"])
+def test_build_site_no_about_page_nav_omits_about(cache: Path, out: Path, page: str) -> None:
+    _build_pages(cache, out, about=None)
+    assert _nav_texts(out, page) == ["Work", "Contact"]
+
+
+@pytest.mark.parametrize("page", ["index.html", "a/index.html", "about/index.html"])
+def test_build_site_no_contact_page_nav_omits_contact(cache: Path, out: Path, page: str) -> None:
+    _build_pages(cache, out, contact=None)
+    assert _nav_texts(out, page) == ["Work", "About"]
+
+
+@pytest.mark.parametrize("page", ["index.html", "a/index.html"])
+def test_build_site_no_text_pages_nav_lists_only_work(cache: Path, out: Path, page: str) -> None:
+    _build_pages(cache, out, about=None, contact=None)
+    assert _nav_texts(out, page) == ["Work"]
+
+
+@pytest.mark.parametrize(
+    ("page", "current"),
+    [
+        ("index.html", ["Work"]),
+        ("work/index.html", ["Work"]),
+        ("a/index.html", []),
+        ("about/index.html", ["About"]),
+        ("contact/index.html", ["Contact"]),
+    ],
+)
+def test_build_site_nav_marks_only_current_page(
+    cache: Path, out: Path, page: str, current: list[str]
+) -> None:
+    _build_pages(cache, out)
+    assert _current_nav_texts(out, page) == current
+
+
+@pytest.mark.parametrize("base_path", ["/", "/portfolio/"])
+def test_build_site_nav_links_use_base_path(cache: Path, out: Path, base_path: str) -> None:
+    _build_pages(cache, out, base_path=base_path)
+    hrefs = [link.attrs.get("href") for link in _nav_links(out, "a/index.html")]
+    assert hrefs == [f"{base_path}work/", f"{base_path}about/", f"{base_path}contact/"]
+
+
+# build_site: about page
+
+
+def test_build_site_about_page_title(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    assert _one(_page(out / "about" / "index.html"), "title").text() == "About | Site"
+
+
+def test_build_site_about_page_heading(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    assert _one(_page(out / "about" / "index.html"), "h1.page-heading").text() == "About"
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_text_page_body_has_page_text_class(cache: Path, out: Path, page: str) -> None:
+    _build_pages(cache, out)
+    assert "page-text" in _one(_page(out / page / "index.html"), "body").classes
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_text_page_has_no_meta_line(cache: Path, out: Path, page: str) -> None:
+    _build_pages(cache, out)
+    assert _page(out / page / "index.html").find_all(".page-meta") == []
+
+
+def test_build_site_about_page_lede_is_first_paragraph(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    page = _page(out / "about" / "index.html")
+    assert _one(page, "section.text-column p.lede").text() == ABOUT_LEDE
+
+
+def test_build_site_about_page_prose_has_other_paragraphs(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    prose = _one(_page(out / "about" / "index.html"), "section.text-column div.prose")
+    assert [p.text() for p in prose.find_all("p")] == ABOUT_PARAGRAPHS
+
+
+def test_build_site_about_page_single_paragraph_has_no_prose(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, about=_about_json("Just one line."))
+    assert _page(out / "about" / "index.html").find_all("div.prose") == []
+
+
+def test_build_site_about_page_signoff_links_contact(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    link = _one(_page(out / "about" / "index.html"), "section.text-column p.signoff a.text-link")
+    assert (link.text(), link.attrs.get("href")) == ("Contact", "/contact/")
+
+
+def test_build_site_about_page_signoff_link_uses_base_path(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, base_path="/portfolio/")
+    link = _one(_page(out / "about" / "index.html"), "p.signoff a.text-link")
+    assert link.attrs.get("href") == "/portfolio/contact/"
+
+
+def test_build_site_about_page_without_contact_has_no_signoff(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=None)
+    assert _page(out / "about" / "index.html").find_all("p.signoff") == []
+
+
+def test_build_site_about_page_with_unparseable_contact_has_no_signoff(
+    cache: Path, out: Path
+) -> None:
+    _build_pages(cache, out, contact=UNPARSEABLE)
+    assert _page(out / "about" / "index.html").find_all("p.signoff") == []
+
+
+# build_site: contact page
+
+
+def test_build_site_contact_page_title(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    assert _one(_page(out / "contact" / "index.html"), "title").text() == "Contact | Site"
+
+
+def test_build_site_contact_page_heading(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    assert _one(_page(out / "contact" / "index.html"), "h1.page-heading").text() == "Contact"
+
+
+def test_build_site_contact_page_email_is_mailto_link(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    link = _one(_page(out / "contact" / "index.html"), "a.contact-email")
+    assert (link.text(), link.attrs.get("href")) == (
+        "hello@example.com",
+        "mailto:hello@example.com",
+    )
+
+
+def test_build_site_contact_page_without_email_has_no_email_link(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=_contact_json(None, ("Based in", "Lisbon")))
+    assert _page(out / "contact" / "index.html").find_all("a.contact-email") == []
+
+
+def test_build_site_contact_page_facts_list_entries_in_order(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    assert _facts(out) == [
+        ("Instagram", "instagram.com/me", "https://instagram.com/me/"),
+        ("Based in", "Lisbon", None),
+    ]
+
+
+def test_build_site_contact_page_email_value_entry_links_mailto(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=_contact_json(None, ("Studio", "studio@example.com")))
+    assert _facts(out) == [("Studio", "studio@example.com", "mailto:studio@example.com")]
+
+
+def test_build_site_contact_page_javascript_value_not_linked(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=_contact_json(None, ("Website", "javascript:alert(1)")))
+    assert _facts(out) == [("Website", "javascript:alert(1)", None)]
+
+
+def test_build_site_contact_page_only_email_has_no_facts(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=_contact_json("hello@example.com"))
+    assert _page(out / "contact" / "index.html").find_all("ul.contact-facts") == []
+
+
+# build_site: text pages with untrusted text
+
+HTML_PAYLOAD = '<script>alert("x")</script> & <b>bold</b>'
+
+
+def test_build_site_about_lede_html_escaped(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, about=_about_json(HTML_PAYLOAD))
+    assert _one(_page(out / "about" / "index.html"), "p.lede").text() == HTML_PAYLOAD
+
+
+def test_build_site_about_prose_html_escaped(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, about=_about_json("Lede.", HTML_PAYLOAD))
+    prose = _one(_page(out / "about" / "index.html"), "div.prose")
+    assert [p.text() for p in prose.find_all("p")] == [HTML_PAYLOAD]
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_text_page_html_payload_never_raw(cache: Path, out: Path, page: str) -> None:
+    _build_pages(
+        cache,
+        out,
+        about=_about_json(HTML_PAYLOAD),
+        contact=_contact_json(None, ("Note", HTML_PAYLOAD)),
+    )
+    assert "<script>" not in _read(out / page / "index.html")
+
+
+def test_build_site_contact_fact_label_and_value_html_escaped(cache: Path, out: Path) -> None:
+    _build_pages(
+        cache, out, contact=_contact_json(None, ("<i>Studio</i>", "<img src=x onerror=alert(1)>"))
+    )
+    assert _facts(out) == [("<i>Studio</i>", "<img src=x onerror=alert(1)>", None)]
+
+
+def test_build_site_contact_link_with_quote_cannot_add_attributes(cache: Path, out: Path) -> None:
+    url = 'https://example.com/"onmouseover="alert(1)'
+    _build_pages(cache, out, contact=_contact_json(None, ("Site", url)))
+    link = _one(_page(out / "contact" / "index.html"), "span.contact-value a")
+    assert "onmouseover" not in link.attrs
+
+
+def test_build_site_contact_link_with_quote_keeps_href_intact(cache: Path, out: Path) -> None:
+    url = 'https://example.com/"onmouseover="alert(1)'
+    _build_pages(cache, out, contact=_contact_json(None, ("Site", url)))
+    link = _one(_page(out / "contact" / "index.html"), "span.contact-value a")
+    assert link.attrs.get("href") == url
+
+
+# build_site: contact form
+
+
+def test_build_site_contact_form_url_unset_has_no_form(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    assert _page(out / "contact" / "index.html").find_all("form") == []
+
+
+def test_build_site_contact_form_url_unset_has_no_message_section(cache: Path, out: Path) -> None:
+    _build_pages(cache, out)
+    assert "Send a message" not in _read(out / "contact" / "index.html")
+
+
+def test_build_site_contact_form_posts_to_configured_url(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    form = _form(out)
+    assert (form.attrs.get("action"), form.attrs.get("method")) == (FORM_URL, "post")
+
+
+def test_build_site_contact_form_is_in_labelled_section(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    section = _one(_page(out / "contact" / "index.html"), "section.contact-form-section")
+    heading = _one(section, "h2.section-heading")
+    assert (section.attrs.get("aria-labelledby"), heading.attrs.get("id"), heading.text()) == (
+        "contact-form-heading",
+        "contact-form-heading",
+        "Send a message",
+    )
+
+
+def test_build_site_contact_form_field_names_in_order(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    names = [
+        element.attrs.get("name")
+        for element in _form(out).descendants()
+        if element.tag in ("input", "textarea")
+    ]
+    assert names == ["name", "email", "message", "_gotcha"]
+
+
+@pytest.mark.parametrize("name", ["name", "email", "message"])
+def test_build_site_contact_form_visible_fields_required(cache: Path, out: Path, name: str) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    assert "required" in _form_field(out, name).attrs
+
+
+def test_build_site_contact_form_email_field_has_email_type(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    assert _form_field(out, "email").attrs.get("type") == "email"
+
+
+def test_build_site_contact_form_message_is_textarea(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    assert _form_field(out, "message").tag == "textarea"
+
+
+@pytest.mark.parametrize(
+    ("name", "label"), [("name", "Name"), ("email", "Email"), ("message", "Message")]
+)
+def test_build_site_contact_form_fields_wrapped_in_labels(
+    cache: Path, out: Path, name: str, label: str
+) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    labels = [
+        element
+        for element in _form(out).find_all("label")
+        if any(child.attrs.get("name") == name for child in element.descendants())
+    ]
+    assert [_one(element, "span.label").text() for element in labels] == [label]
+
+
+def test_build_site_contact_form_honeypot_inside_hidden_trap(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    trap = _one(_form(out), "div.form-trap")
+    names = [element.attrs.get("name") for element in trap.find_all("input")]
+    assert (trap.attrs.get("aria-hidden"), names) == ("true", ["_gotcha"])
+
+
+def test_build_site_contact_form_honeypot_not_focusable_or_required(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    honeypot = _form_field(out, "_gotcha")
+    assert (honeypot.attrs.get("tabindex"), "required" in honeypot.attrs) == ("-1", False)
+
+
+def test_build_site_contact_form_has_submit_button(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    button = _one(_form(out), "button")
+    assert (button.attrs.get("type"), button.text()) == ("submit", "Send message")
+
+
+def test_build_site_contact_form_url_never_on_other_pages(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    pages = [path for path in out.rglob("*.html") if path.parent.name != "contact"]
+    assert not any(FORM_URL in _read(path) for path in pages)
+
+
+# build_site: text page failures
+
+
+@pytest.mark.parametrize("field", ["about", "contact"])
+def test_build_site_text_page_original_missing_raises_build_error(
+    cache: Path, out: Path, field: str
+) -> None:
+    from reel.build import BuildError, build_site
+    from reel.models import Manifest
+
+    manifest = Manifest(
+        albums=_three_albums(cache), **{field: make_text_file(f"t-{field}", f"{field}.json")}
+    )
+    with pytest.raises(
+        BuildError, match=rf"'{field}\.json' is missing from .*Run `reel sync` again"
+    ):
+        build_site(manifest, cache, out, "Site")
+
+
+def test_build_site_text_page_missing_message_uses_drive_name(cache: Path, out: Path) -> None:
+    from reel.build import BuildError, build_site
+    from reel.models import Manifest
+
+    manifest = Manifest(albums=[], about=make_text_file("t-about", "About.JSON"))
+    with pytest.raises(BuildError, match=r"'About\.JSON' is missing from"):
+        build_site(manifest, cache, out, "Site")
+
+
+def test_build_site_text_page_missing_keeps_previous_output(cache: Path, out: Path) -> None:
+    from reel.build import BuildError, build_site
+    from reel.models import Manifest
+
+    _build_pages(cache, out)
+    before = _snapshot(out)
+    (cache / "originals" / "t-about").unlink()
+    manifest = Manifest(albums=_three_albums(cache), about=make_text_file("t-about", "about.json"))
+    with pytest.raises(BuildError):
+        build_site(manifest, cache, out, "Site")
+    assert _snapshot(out) == before
+
+
+def test_build_site_text_page_unsafe_id_raises_build_error(cache: Path, out: Path) -> None:
+    from reel.build import BuildError, build_site
+    from reel.models import Manifest
+
+    manifest = Manifest(albums=[], contact=make_text_file("../evil", "contact.json"))
+    with pytest.raises(BuildError):
+        build_site(manifest, cache, out, "Site")
+
+
+@pytest.mark.parametrize(
+    "about",
+    [
+        "   \n\n\t\n",
+        '{"lede": "x",',
+        '{"paragraphs": ["no lede"]}',
+        '["lede"]',
+        b"caf\xe9 \xff\xfe",
+        b"a" * (64 * 1024 + 1),
+    ],
+    ids=["blank", "invalid-json", "missing-lede", "array", "latin1", "huge"],
+)
+def test_build_site_unusable_about_text_omits_page(
+    cache: Path, out: Path, about: str | bytes
+) -> None:
+    _build_pages(cache, out, about=about)
+    assert not (out / "about").exists()
+
+
+def test_build_site_unusable_about_text_still_builds_albums(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, about="   \n")
+    assert (out / "a" / "index.html").is_file()
+
+
+def test_build_site_unusable_about_text_drops_nav_link(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, about="   \n")
+    assert _nav_texts(out, "index.html") == ["Work", "Contact"]
+
+
+def test_build_site_unusable_contact_text_omits_page(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=_contact_json("not-an-email"))
+    assert not (out / "contact").exists()
+
+
+def test_build_site_unusable_contact_text_logs_warning(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _build_pages(cache, out, contact=UNPARSEABLE)
+    assert any(record.levelno == logging.WARNING for record in caplog.records)
+
+
+# build_site: CONTACT_FORM_URL without a usable contact page
+
+FORM_WITHOUT_CONTACT_WARNING = (
+    "CONTACT_FORM_URL is set but there is no usable contact.json; the form is not shown."
+)
+
+
+def _form_warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING and "CONTACT_FORM_URL" in record.getMessage()
+    ]
+
+
+def test_build_site_form_url_without_contact_file_warns(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _build_pages(cache, out, contact=None, contact_form_url=FORM_URL)
+    assert _form_warnings(caplog) == [FORM_WITHOUT_CONTACT_WARNING]
+
+
+def test_build_site_form_url_with_unparseable_contact_warns(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _build_pages(cache, out, contact=UNPARSEABLE, contact_form_url=FORM_URL)
+    assert _form_warnings(caplog) == [FORM_WITHOUT_CONTACT_WARNING]
+
+
+def test_build_site_form_url_without_contact_still_builds(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=None, contact_form_url=FORM_URL)
+    assert (out / "index.html").is_file()
+
+
+def test_build_site_form_url_with_contact_page_does_not_warn(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _build_pages(cache, out, contact_form_url=FORM_URL)
+    assert _form_warnings(caplog) == []
+
+
+def test_build_site_form_url_unset_without_contact_does_not_warn(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _build_pages(cache, out, contact=None)
+    assert _form_warnings(caplog) == []
+
+
+@pytest.mark.parametrize("contact", [None, UNPARSEABLE], ids=["missing", "unparseable"])
+def test_build_site_form_url_never_logged(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture, contact: str | None
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    _build_pages(cache, out, contact=contact, contact_form_url=FORM_URL)
+    assert not any("forms.example.test" in record.getMessage() for record in caplog.records)
+
+
+def test_build_site_invalid_contact_json_still_builds_other_pages(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=_contact_json(None, ("", "x")))
+    assert (out / "about" / "index.html").is_file()
+
+
+def test_build_site_invalid_contact_json_omits_page(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=_contact_json(None, ("", "x")))
+    assert not (out / "contact").exists()
+
+
+def test_build_site_invalid_json_warning_names_drive_file(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from reel.build import build_site
+    from reel.models import Manifest
+
+    caplog.set_level(logging.WARNING)
+    write_text_original(cache, "t-about", '{"lede": "x",')
+    build_site(Manifest(albums=[], about=make_text_file("t-about", "About.JSON")), cache, out, "S")
+    assert any("Skipping 'About.JSON': not valid JSON" in message for message in caplog.messages)
+
+
+def test_build_site_form_url_with_empty_contact_json_warns(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _build_pages(cache, out, contact=_contact_json(""), contact_form_url=FORM_URL)
+    assert _form_warnings(caplog) == [FORM_WITHOUT_CONTACT_WARNING]
+
+
+LONG_NUMBER_ABOUT = '{"lede": "x", "_comment": ' + "9" * 5000 + "}"
+
+
+def test_build_site_about_with_overlong_number_omits_page(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, about=LONG_NUMBER_ABOUT)
+    assert not (out / "about").exists()
+
+
+def test_build_site_about_with_overlong_number_still_builds(cache: Path, out: Path) -> None:
+    assert _build_pages(cache, out, about=LONG_NUMBER_ABOUT) == 3
