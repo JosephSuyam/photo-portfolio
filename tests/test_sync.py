@@ -856,7 +856,7 @@ def test_sync_portfolio_locked_stale_original_logs_warning_and_succeeds(
     assert _warned_about(caplog, "p2")
 
 
-# --- sync_portfolio: about.txt and contact.txt in the root -------------------------------
+# --- sync_portfolio: about.json and contact.json in the root -------------------------------
 
 
 def _root_text(
@@ -864,10 +864,10 @@ def _root_text(
     file_id: str,
     name: str,
     content: bytes | None = None,
-    mime_type: str = "text/plain",
+    mime_type: str = "application/json",
 ) -> None:
     drive.add_file(
-        ROOT, file_id, name, content=content or f"text-{file_id}".encode(), mime_type=mime_type
+        ROOT, file_id, name, content=content or f"json-{file_id}".encode(), mime_type=mime_type
     )
 
 
@@ -893,23 +893,25 @@ def test_sync_portfolio_no_text_files_contact_is_none(
     assert _sync(drive, cache_dir).contact is None
 
 
-def test_sync_portfolio_about_txt_in_root_recorded(drive: FakeDriveClient, cache_dir: Path) -> None:
-    _root_text(drive, "t-about", "about.txt")
+def test_sync_portfolio_about_json_in_root_recorded(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_text(drive, "t-about", "about.json")
     assert _about_id(_sync(drive, cache_dir)) == "t-about"
 
 
-def test_sync_portfolio_contact_txt_in_root_recorded(
+def test_sync_portfolio_contact_json_in_root_recorded(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-contact", "contact.txt")
+    _root_text(drive, "t-contact", "contact.json")
     assert _contact_id(_sync(drive, cache_dir)) == "t-contact"
 
 
 def test_sync_portfolio_about_and_contact_not_swapped(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-contact", "contact.txt")
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-contact", "contact.json")
+    _root_text(drive, "t-about", "about.json")
     manifest = _sync(drive, cache_dir)
     assert (_about_id(manifest), _contact_id(manifest)) == ("t-about", "t-contact")
 
@@ -920,8 +922,8 @@ def test_sync_portfolio_text_file_metadata_copied_from_drive(
     drive.add_file(
         ROOT,
         "t-about",
-        "About.txt",
-        mime_type="text/plain",
+        "About.json",
+        mime_type="application/json",
         md5_checksum="abc",
         modified_time=LATER,
     )
@@ -932,10 +934,10 @@ def test_sync_portfolio_text_file_metadata_copied_from_drive(
         about.mime_type,
         about.md5_checksum,
         about.modified_time,
-    ) == ("t-about", "About.txt", "text/plain", "abc", LATER)
+    ) == ("t-about", "About.json", "application/json", "abc", LATER)
 
 
-@pytest.mark.parametrize("name", ["About.txt", "ABOUT.TXT", "aBoUt.TxT", "  about.txt  "])
+@pytest.mark.parametrize("name", ["About.json", "ABOUT.JSON", "aBoUt.JsOn", "  about.json  "])
 def test_sync_portfolio_about_name_matched_case_and_space_insensitive(
     drive: FakeDriveClient, cache_dir: Path, name: str
 ) -> None:
@@ -943,7 +945,7 @@ def test_sync_portfolio_about_name_matched_case_and_space_insensitive(
     assert _about_id(_sync(drive, cache_dir)) == "t-about"
 
 
-@pytest.mark.parametrize("name", ["Contact.txt", "CONTACT.TXT", " contact.txt"])
+@pytest.mark.parametrize("name", ["Contact.json", "CONTACT.JSON", " contact.json"])
 def test_sync_portfolio_contact_name_matched_case_and_space_insensitive(
     drive: FakeDriveClient, cache_dir: Path, name: str
 ) -> None:
@@ -952,7 +954,8 @@ def test_sync_portfolio_contact_name_matched_case_and_space_insensitive(
 
 
 @pytest.mark.parametrize(
-    "name", ["about.md", "about", "about.txt.bak", "my about.txt", "about .txt", "about.text"]
+    "name",
+    ["about.txt", "about", "about.json.txt", "about.json.bak", "my about.json", "about .json"],
 )
 def test_sync_portfolio_other_about_like_name_ignored(
     drive: FakeDriveClient, cache_dir: Path, name: str
@@ -961,79 +964,128 @@ def test_sync_portfolio_other_about_like_name_ignored(
     assert _sync(drive, cache_dir).about is None
 
 
-@pytest.mark.parametrize("name", ["about.md", "notes.txt", "contact.txt.bak"])
-def test_sync_portfolio_other_root_text_file_not_downloaded(
+@pytest.mark.parametrize("name", ["about.txt", "contact.txt", "notes.json", "contact.json.bak"])
+def test_sync_portfolio_other_root_file_not_downloaded(
     drive: FakeDriveClient, cache_dir: Path, name: str
 ) -> None:
-    _root_text(drive, "t-other", name)
+    _root_text(drive, "t-other", name, mime_type="text/plain")
     _sync(drive, cache_dir)
     assert "t-other" not in drive.downloads
 
 
-def test_sync_portfolio_other_root_text_file_logs_no_warning(
-    drive: FakeDriveClient, cache_dir: Path, caplog: pytest.LogCaptureFixture
+@pytest.mark.parametrize("name", ["about.txt", "contact.txt", "notes.json"])
+def test_sync_portfolio_other_root_file_logs_no_warning(
+    drive: FakeDriveClient, cache_dir: Path, caplog: pytest.LogCaptureFixture, name: str
 ) -> None:
     caplog.set_level(logging.WARNING)
-    _root_text(drive, "t-other", "notes.txt")
+    _root_text(drive, "t-other", name, mime_type="text/plain")
     _sync(drive, cache_dir)
-    assert not _warned_about(caplog, "notes.txt")
+    assert [
+        record.getMessage() for record in caplog.records if record.levelno >= logging.WARNING
+    ] == []
 
 
-@pytest.mark.parametrize("mime_type", ["text/plain", "text/markdown", "text/plain; charset=utf-8"])
-def test_sync_portfolio_about_any_text_mime_type_accepted(
-    drive: FakeDriveClient, cache_dir: Path, mime_type: str
+def test_sync_portfolio_old_about_txt_ignored_beside_about_json(
+    drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt", mime_type=mime_type)
+    _root_text(drive, "t-old", "about.txt", mime_type="text/plain")
+    _root_text(drive, "t-about", "about.json")
     assert _about_id(_sync(drive, cache_dir)) == "t-about"
 
 
 @pytest.mark.parametrize(
     "mime_type",
+    ["application/json", "text/plain", "application/octet-stream", "text/x-json"],
+)
+def test_sync_portfolio_about_matched_by_name_whatever_drive_type(
+    drive: FakeDriveClient, cache_dir: Path, mime_type: str
+) -> None:
+    _root_text(drive, "t-about", "about.json", mime_type=mime_type)
+    assert _about_id(_sync(drive, cache_dir)) == "t-about"
+
+
+@pytest.mark.parametrize("mime_type", ["application/json", "application/octet-stream"])
+def test_sync_portfolio_contact_matched_by_name_downloaded(
+    drive: FakeDriveClient, cache_dir: Path, mime_type: str
+) -> None:
+    _root_text(drive, "t-contact", "contact.json", mime_type=mime_type)
+    _sync(drive, cache_dir)
+    assert drive.downloads == ["t-contact"]
+
+
+@pytest.mark.parametrize(
+    "mime_type",
     [
-        "application/pdf",
         "application/vnd.google-apps.document",
-        "image/jpeg",
-        "application/octet-stream",
+        "application/vnd.google-apps.spreadsheet",
         SHORTCUT_MIME_TYPE,
     ],
 )
-def test_sync_portfolio_about_non_text_mime_type_skipped(
+def test_sync_portfolio_about_google_apps_or_shortcut_skipped(
     drive: FakeDriveClient, cache_dir: Path, mime_type: str
 ) -> None:
-    _root_text(drive, "t-about", "about.txt", mime_type=mime_type)
+    _root_text(drive, "t-about", "about.json", mime_type=mime_type)
     assert _sync(drive, cache_dir).about is None
 
 
-@pytest.mark.parametrize("mime_type", ["application/pdf", SHORTCUT_MIME_TYPE])
-def test_sync_portfolio_contact_non_text_mime_type_warns_with_name(
-    drive: FakeDriveClient, cache_dir: Path, caplog: pytest.LogCaptureFixture, mime_type: str
+def test_sync_portfolio_converted_google_doc_warns_with_type(
+    drive: FakeDriveClient, cache_dir: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.WARNING)
-    _root_text(drive, "t-contact", "Contact.txt", mime_type=mime_type)
+    _root_text(drive, "t-contact", "Contact.json", mime_type="application/vnd.google-apps.document")
     _sync(drive, cache_dir)
-    assert _warned_about(caplog, "Skipping 'Contact.txt'")
+    assert _warned_about(
+        caplog,
+        "Skipping 'Contact.json': Google Drive converted it (application/vnd.google-apps.document);"
+        " upload it with conversion turned off",
+    )
 
 
-def test_sync_portfolio_about_non_text_mime_type_not_downloaded(
+def test_sync_portfolio_converted_google_doc_not_downloaded(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt", mime_type="application/pdf")
+    _root_text(drive, "t-about", "about.json", mime_type="application/vnd.google-apps.document")
     _sync(drive, cache_dir)
-    assert "t-about" not in drive.downloads
+    assert drive.downloads == []
 
 
-def test_sync_portfolio_folder_named_about_txt_not_a_page(
+def test_sync_portfolio_shortcut_named_like_page_warns_not_a_file(
+    drive: FakeDriveClient, cache_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _root_text(drive, "t-contact", "Contact.json", mime_type=SHORTCUT_MIME_TYPE)
+    _sync(drive, cache_dir)
+    assert _warned_about(caplog, "Skipping 'Contact.json': not a file")
+
+
+def test_sync_portfolio_folder_named_about_json_not_a_page(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    drive.add_folder(ROOT, "f-about", "about.txt")
+    drive.add_folder(ROOT, "f-about", "about.json")
     drive.add_file("f-about", "p1", "p1.jpg")
     assert _sync(drive, cache_dir).about is None
+
+
+def test_sync_portfolio_folder_named_about_json_stays_an_album(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    drive.add_folder(ROOT, "f-about", "about.json")
+    drive.add_file("f-about", "p1", "p1.jpg")
+    assert _album_names(_sync(drive, cache_dir)) == ["about.json"]
+
+
+def test_sync_portfolio_converted_duplicate_does_not_hide_usable_file(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_text(drive, "t-doc", "About.json", mime_type="application/vnd.google-apps.document")
+    _root_text(drive, "t-file", "about.json")
+    assert _about_id(_sync(drive, cache_dir)) == "t-file"
 
 
 def test_sync_portfolio_unsafe_text_file_id_skipped(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "../about", "about.txt")
+    _root_text(drive, "../about", "about.json")
     assert _sync(drive, cache_dir).about is None
 
 
@@ -1041,15 +1093,15 @@ def test_sync_portfolio_unsafe_text_file_id_warns_with_name(
     drive: FakeDriveClient, cache_dir: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.WARNING)
-    _root_text(drive, "../about", "about.txt")
+    _root_text(drive, "../about", "about.json")
     _sync(drive, cache_dir)
-    assert _warned_about(caplog, "Skipping 'about.txt'")
+    assert _warned_about(caplog, "Skipping 'about.json'")
 
 
 def test_sync_portfolio_unsafe_text_file_id_not_downloaded(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "../about", "about.txt")
+    _root_text(drive, "../about", "about.json")
     _sync(drive, cache_dir)
     assert drive.downloads == []
 
@@ -1057,16 +1109,16 @@ def test_sync_portfolio_unsafe_text_file_id_not_downloaded(
 def test_sync_portfolio_duplicate_about_case_variant_first_in_natural_order_wins(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-lower", "about.txt")
-    _root_text(drive, "t-upper", "About.txt")
+    _root_text(drive, "t-lower", "about.json")
+    _root_text(drive, "t-upper", "About.json")
     assert _about_id(_sync(drive, cache_dir)) == "t-upper"
 
 
 def test_sync_portfolio_duplicate_about_same_name_lowest_id_wins(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-b", "about.txt")
-    _root_text(drive, "t-a", "about.txt")
+    _root_text(drive, "t-b", "about.json")
+    _root_text(drive, "t-a", "about.json")
     assert _about_id(_sync(drive, cache_dir)) == "t-a"
 
 
@@ -1074,17 +1126,17 @@ def test_sync_portfolio_duplicate_about_warns_about_extra(
     drive: FakeDriveClient, cache_dir: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.WARNING)
-    _root_text(drive, "t-lower", "about.txt")
-    _root_text(drive, "t-upper", "About.txt")
+    _root_text(drive, "t-lower", "about.json")
+    _root_text(drive, "t-upper", "About.json")
     _sync(drive, cache_dir)
-    assert _warned_about(caplog, "Skipping 'about.txt': using an earlier about.txt instead")
+    assert _warned_about(caplog, "Skipping 'about.json': using an earlier about.json instead")
 
 
 def test_sync_portfolio_duplicate_contact_extra_not_downloaded(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-b", "contact.txt")
-    _root_text(drive, "t-a", "CONTACT.txt")
+    _root_text(drive, "t-b", "contact.json")
+    _root_text(drive, "t-a", "CONTACT.json")
     _sync(drive, cache_dir)
     assert drive.downloads == ["t-a"]
 
@@ -1092,7 +1144,7 @@ def test_sync_portfolio_duplicate_contact_extra_not_downloaded(
 def test_sync_portfolio_text_file_downloaded_to_originals(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt", content=b"Hello there.")
+    _root_text(drive, "t-about", "about.json", content=b"Hello there.")
     _sync(drive, cache_dir)
     assert original_path(cache_dir, "t-about").read_bytes() == b"Hello there."
 
@@ -1101,8 +1153,8 @@ def test_sync_portfolio_text_files_recorded_in_written_manifest(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
     _one_album(drive, "p1")
-    _root_text(drive, "t-about", "about.txt")
-    _root_text(drive, "t-contact", "contact.txt")
+    _root_text(drive, "t-about", "about.json")
+    _root_text(drive, "t-contact", "contact.json")
     manifest = _sync(drive, cache_dir)
     assert load_manifest(cache_dir / "manifest.json") == manifest
 
@@ -1111,8 +1163,8 @@ def test_sync_portfolio_text_files_need_no_extra_listing(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
     _one_album(drive, "p1")
-    _root_text(drive, "t-about", "about.txt")
-    _root_text(drive, "t-contact", "contact.txt")
+    _root_text(drive, "t-about", "about.json")
+    _root_text(drive, "t-contact", "contact.json")
     _sync(drive, cache_dir)
     assert drive.listed == [ROOT, "f-book"]
 
@@ -1120,7 +1172,7 @@ def test_sync_portfolio_text_files_need_no_extra_listing(
 def test_sync_portfolio_text_files_root_still_looked_up_first(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     _sync(drive, cache_dir)
     assert drive.calls[0] == ("get_folder", ROOT)
 
@@ -1130,21 +1182,21 @@ def test_sync_portfolio_stray_root_image_still_not_downloaded_beside_text_files(
 ) -> None:
     _one_album(drive, "p1")
     drive.add_file(ROOT, "stray", "stray.jpg")
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     _sync(drive, cache_dir)
     assert "stray" not in drive.downloads
 
 
 def test_sync_portfolio_text_files_not_albums(drive: FakeDriveClient, cache_dir: Path) -> None:
     _one_album(drive, "p1")
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     assert _album_names(_sync(drive, cache_dir)) == ["Book"]
 
 
 def test_sync_portfolio_text_file_original_kept_after_sync(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     _sync(drive, cache_dir)
     _sync(drive, cache_dir)
     assert original_path(cache_dir, "t-about").is_file()
@@ -1153,8 +1205,8 @@ def test_sync_portfolio_text_file_original_kept_after_sync(
 def test_sync_portfolio_unchanged_text_file_not_downloaded_again(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt")
-    _root_text(drive, "t-contact", "contact.txt")
+    _root_text(drive, "t-about", "about.json")
+    _root_text(drive, "t-contact", "contact.json")
     _sync(drive, cache_dir)
     drive.downloads.clear()
     _sync(drive, cache_dir)
@@ -1164,8 +1216,8 @@ def test_sync_portfolio_unchanged_text_file_not_downloaded_again(
 def test_sync_portfolio_text_file_md5_changed_redownloaded(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt")
-    _root_text(drive, "t-contact", "contact.txt")
+    _root_text(drive, "t-about", "about.json")
+    _root_text(drive, "t-contact", "contact.json")
     _sync(drive, cache_dir)
     drive.downloads.clear()
     drive.update_file("t-about", content=b"New bio.", md5_checksum="new-md5")
@@ -1176,7 +1228,7 @@ def test_sync_portfolio_text_file_md5_changed_redownloaded(
 def test_sync_portfolio_text_file_md5_changed_original_replaced(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     _sync(drive, cache_dir)
     drive.update_file("t-about", content=b"New bio.", md5_checksum="new-md5")
     _sync(drive, cache_dir)
@@ -1186,8 +1238,8 @@ def test_sync_portfolio_text_file_md5_changed_original_replaced(
 def test_sync_portfolio_text_file_modified_time_changed_redownloaded(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt")
-    _root_text(drive, "t-contact", "contact.txt")
+    _root_text(drive, "t-about", "about.json")
+    _root_text(drive, "t-contact", "contact.json")
     _sync(drive, cache_dir)
     drive.downloads.clear()
     drive.update_file("t-contact", modified_time=LATER)
@@ -1198,7 +1250,7 @@ def test_sync_portfolio_text_file_modified_time_changed_redownloaded(
 def test_sync_portfolio_text_file_missing_locally_redownloaded(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     _sync(drive, cache_dir)
     drive.downloads.clear()
     original_path(cache_dir, "t-about").unlink()
@@ -1215,7 +1267,7 @@ def test_sync_portfolio_text_file_after_old_manifest_downloaded(
     albums_only = {"albums": json.loads(manifest_path.read_text(encoding="utf-8"))["albums"]}
     manifest_path.write_text(json.dumps(albums_only), encoding="utf-8")
     drive.downloads.clear()
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     _sync(drive, cache_dir)
     assert drive.downloads == ["t-about"]
 
@@ -1223,7 +1275,7 @@ def test_sync_portfolio_text_file_after_old_manifest_downloaded(
 def test_sync_portfolio_text_file_deleted_in_drive_original_removed(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     _sync(drive, cache_dir)
     drive.remove("t-about")
     _sync(drive, cache_dir)
@@ -1233,7 +1285,7 @@ def test_sync_portfolio_text_file_deleted_in_drive_original_removed(
 def test_sync_portfolio_text_file_deleted_in_drive_dropped_from_manifest(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
-    _root_text(drive, "t-contact", "contact.txt")
+    _root_text(drive, "t-contact", "contact.json")
     _sync(drive, cache_dir)
     drive.remove("t-contact")
     _sync(drive, cache_dir)
@@ -1243,7 +1295,7 @@ def test_sync_portfolio_text_file_deleted_in_drive_dropped_from_manifest(
 def test_sync_portfolio_text_file_deleted_but_manifest_write_fails_original_kept(
     drive: FakeDriveClient, cache_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     _sync(drive, cache_dir)
     drive.remove("t-about")
 
@@ -1260,7 +1312,7 @@ def test_sync_portfolio_text_file_download_failure_keeps_previous_manifest(
     drive: FakeDriveClient, cache_dir: Path
 ) -> None:
     _one_album(drive, "p1")
-    _root_text(drive, "t-about", "about.txt")
+    _root_text(drive, "t-about", "about.json")
     _sync(drive, cache_dir)
     before = (cache_dir / "manifest.json").read_bytes()
     drive.update_file("t-about", md5_checksum="new-md5")

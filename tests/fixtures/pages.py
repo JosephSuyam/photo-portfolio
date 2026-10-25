@@ -1,4 +1,4 @@
-"""Builders for about.txt / contact.txt manifest entries and their cached originals."""
+"""Builders for about.json / contact.json manifest entries and their cached originals."""
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,7 +16,7 @@ def make_text_file(file_id: str, name: str) -> "TextFile":
     return TextFile(
         file_id=file_id,
         name=name,
-        mime_type="text/plain",
+        mime_type="application/json",
         md5_checksum=f"md5-{file_id}",
         modified_time=_EPOCH,
     )

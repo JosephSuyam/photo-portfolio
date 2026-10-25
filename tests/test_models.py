@@ -34,8 +34,8 @@ def _about_file() -> "TextFile":
 
     return TextFile(
         file_id="t-about",
-        name="about.txt",
-        mime_type="text/plain",
+        name="about.json",
+        mime_type="application/json",
         md5_checksum="md5-about",
         modified_time=datetime(2024, 1, 1, tzinfo=UTC),
     )
@@ -45,7 +45,10 @@ def test_text_file_md5_checksum_defaults_to_none() -> None:
     from reel.models import TextFile
 
     text_file = TextFile(
-        file_id="t1", name="about.txt", mime_type="text/plain", modified_time=datetime.now(UTC)
+        file_id="t1",
+        name="about.json",
+        mime_type="application/json",
+        modified_time=datetime.now(UTC),
     )
     assert text_file.md5_checksum is None
 
@@ -62,7 +65,7 @@ def test_manifest_old_json_without_text_pages_validates_with_none(field: str) ->
 
 
 def test_manifest_json_round_trip_preserves_text_pages() -> None:
-    contact = _about_file().model_copy(update={"file_id": "t-contact", "name": "Contact.txt"})
+    contact = _about_file().model_copy(update={"file_id": "t-contact", "name": "Contact.json"})
     manifest = Manifest(albums=[], about=_about_file(), contact=contact)
     assert Manifest.model_validate_json(manifest.model_dump_json()) == manifest
 
@@ -73,4 +76,6 @@ def test_text_file_missing_modified_time_rejected() -> None:
     from reel.models import TextFile
 
     with pytest.raises(ValidationError):
-        TextFile.model_validate({"file_id": "t1", "name": "about.txt", "mime_type": "text/plain"})
+        TextFile.model_validate(
+            {"file_id": "t1", "name": "about.json", "mime_type": "application/json"}
+        )

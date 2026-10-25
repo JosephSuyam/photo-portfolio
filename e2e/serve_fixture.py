@@ -6,12 +6,13 @@ The fixture has five albums (the first with an explicit cover.* file) of gradien
 mixed orientations. "Landscapes" has eleven photos: both mosaic groups ([big, small, small, wide]
 and [wide, big, small, small]) plus a remainder of three. "Still Life", the last, has a single
 photo. Every (size, colour) pair is unique, so no two photos share a content-hashed file.
-The root also has an about.txt (three paragraphs) and a contact.txt (an email, a link, and a
-plain entry), and the contact page gets a form posting to a fake https URL that the tests
-intercept. It never touches Google Drive or the network.
+The root also has an about.json (a lede and two paragraphs) and a Contact.json (an email, a
+link, and a plain entry), and the contact page gets a form posting to a fake https URL that
+the tests intercept. It never touches Google Drive or the network.
 """
 
 import argparse
+import json
 import shutil
 import tempfile
 from datetime import UTC, datetime
@@ -28,19 +29,28 @@ FIXTURE_DIR = PROJECT_ROOT / ".tmp" / "e2e"
 SITE_TITLE = "Reel E2E"
 _MODIFIED = datetime(2026, 1, 1, tzinfo=UTC)
 CONTACT_FORM_URL = "https://forms.example.test/f/reel-e2e"
-ABOUT_TEXT = (
-    "I photograph quiet places at the edges of cities, mostly at dusk.\r\n"
-    "\r\n"
-    "Most of this work is made on medium-format film and printed by hand\r\n"
-    "in a small darkroom.\r\n"
-    "\r\n"
-    "Prints and commissions are available on request.\r\n"
+# about.json is written with CRLF line endings and a BOM, as a Windows editor might save it.
+ABOUT_JSON = (
+    "\ufeff{\r\n"
+    '  "_comment": "Fixture about page; keys like this one are ignored.",\r\n'
+    '  "lede": "I photograph quiet places at the edges of cities, mostly at dusk.",\r\n'
+    '  "paragraphs": [\r\n'
+    '    "Most of this work is made on medium-format film and printed by hand\\n'
+    'in a small darkroom.",\r\n'
+    '    "Prints and commissions are available on request."\r\n'
+    "  ]\r\n"
+    "}\r\n"
 )
-CONTACT_TEXT = (
-    "# Shown on /contact/\n"
-    "Email: studio@example.test\n"
-    "Instagram: https://instagram.example.test/reel-e2e/\n"
-    "Based in: Lisbon, Portugal\n"
+CONTACT_JSON = json.dumps(
+    {
+        "_comment": "Fixture contact page.",
+        "email": "studio@example.test",
+        "details": [
+            {"label": "Instagram", "value": "https://instagram.example.test/reel-e2e/"},
+            {"label": "Based in", "value": "Lisbon, Portugal"},
+        ],
+    },
+    indent=2,
 )
 
 # (album title, slug, [(width, height), ...], has cover file)
@@ -107,14 +117,16 @@ def make_manifest(cache: Path) -> Manifest:
         )
     return Manifest(
         albums=albums,
-        about=_text_file(cache, "page-about", "about.txt", ABOUT_TEXT),
-        contact=_text_file(cache, "page-contact", "Contact.txt", CONTACT_TEXT),
+        about=_text_file(cache, "page-about", "about.json", ABOUT_JSON),
+        contact=_text_file(cache, "page-contact", "Contact.json", CONTACT_JSON),
     )
 
 
 def _text_file(cache: Path, file_id: str, name: str, text: str) -> TextFile:
     original_path(cache, file_id).write_bytes(text.encode("utf-8"))
-    return TextFile(file_id=file_id, name=name, mime_type="text/plain", modified_time=_MODIFIED)
+    return TextFile(
+        file_id=file_id, name=name, mime_type="application/json", modified_time=_MODIFIED
+    )
 
 
 def build_fixture_site() -> Path:

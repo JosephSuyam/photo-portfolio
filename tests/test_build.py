@@ -1349,10 +1349,26 @@ def test_build_site_with_scripts_stored_theme_applied_before_stylesheet(
 
 # build_site: about and contact pages
 
-ABOUT_TEXT = "I photograph quiet streets.\n\nMostly at night,\non film.\n\nPrints on request."
+
+def _about_json(lede: object, *paragraphs: object) -> str:
+    return json.dumps({"lede": lede, "paragraphs": list(paragraphs)})
+
+
+def _contact_json(email: str | None, *details: tuple[str, str]) -> str:
+    return json.dumps(
+        {"email": email, "details": [{"label": label, "value": value} for label, value in details]}
+    )
+
+
 ABOUT_LEDE = "I photograph quiet streets."
 ABOUT_PARAGRAPHS = ["Mostly at night, on film.", "Prints on request."]
-CONTACT_TEXT = "Email: hello@example.com\nInstagram: https://instagram.com/me/\nBased in: Lisbon\n"
+ABOUT_TEXT = _about_json(ABOUT_LEDE, "Mostly at night,\non film.", "Prints on request.")
+CONTACT_TEXT = _contact_json(
+    "hello@example.com",
+    ("Instagram", "https://instagram.com/me/"),
+    ("Based in", "Lisbon"),
+)
+UNPARSEABLE = "Email: hello@example.com\nnot JSON at all"
 FORM_URL = "https://forms.example.test/f/reel"
 ALL_PAGES = [
     "index.html",
@@ -1372,17 +1388,17 @@ def _build_pages(
     base_path: str = "/",
     albums: list[Album] | None = None,
 ) -> int:
-    """Build three albums plus the given about.txt / contact.txt texts (None = not in Drive)."""
+    """Build three albums plus the given about.json / contact.json texts (None = not in Drive)."""
     from reel.build import build_site
     from reel.models import Manifest
 
     about_file = contact_file = None
     if about is not None:
         write_text_original(cache, "t-about", about)
-        about_file = make_text_file("t-about", "about.txt")
+        about_file = make_text_file("t-about", "about.json")
     if contact is not None:
         write_text_original(cache, "t-contact", contact)
-        contact_file = make_text_file("t-contact", "contact.txt")
+        contact_file = make_text_file("t-contact", "contact.json")
     manifest = Manifest(
         albums=_three_albums(cache) if albums is None else albums,
         about=about_file,
@@ -1561,7 +1577,7 @@ def test_build_site_about_page_prose_has_other_paragraphs(cache: Path, out: Path
 
 
 def test_build_site_about_page_single_paragraph_has_no_prose(cache: Path, out: Path) -> None:
-    _build_pages(cache, out, about="Just one line.")
+    _build_pages(cache, out, about=_about_json("Just one line."))
     assert _page(out / "about" / "index.html").find_all("div.prose") == []
 
 
@@ -1585,7 +1601,7 @@ def test_build_site_about_page_without_contact_has_no_signoff(cache: Path, out: 
 def test_build_site_about_page_with_unparseable_contact_has_no_signoff(
     cache: Path, out: Path
 ) -> None:
-    _build_pages(cache, out, contact="nonsense line")
+    _build_pages(cache, out, contact=UNPARSEABLE)
     assert _page(out / "about" / "index.html").find_all("p.signoff") == []
 
 
@@ -1612,7 +1628,7 @@ def test_build_site_contact_page_email_is_mailto_link(cache: Path, out: Path) ->
 
 
 def test_build_site_contact_page_without_email_has_no_email_link(cache: Path, out: Path) -> None:
-    _build_pages(cache, out, contact="Based in: Lisbon")
+    _build_pages(cache, out, contact=_contact_json(None, ("Based in", "Lisbon")))
     assert _page(out / "contact" / "index.html").find_all("a.contact-email") == []
 
 
@@ -1625,17 +1641,17 @@ def test_build_site_contact_page_facts_list_entries_in_order(cache: Path, out: P
 
 
 def test_build_site_contact_page_email_value_entry_links_mailto(cache: Path, out: Path) -> None:
-    _build_pages(cache, out, contact="Studio: studio@example.com")
+    _build_pages(cache, out, contact=_contact_json(None, ("Studio", "studio@example.com")))
     assert _facts(out) == [("Studio", "studio@example.com", "mailto:studio@example.com")]
 
 
 def test_build_site_contact_page_javascript_value_not_linked(cache: Path, out: Path) -> None:
-    _build_pages(cache, out, contact="Website: javascript:alert(1)")
+    _build_pages(cache, out, contact=_contact_json(None, ("Website", "javascript:alert(1)")))
     assert _facts(out) == [("Website", "javascript:alert(1)", None)]
 
 
 def test_build_site_contact_page_only_email_has_no_facts(cache: Path, out: Path) -> None:
-    _build_pages(cache, out, contact="Email: hello@example.com")
+    _build_pages(cache, out, contact=_contact_json("hello@example.com"))
     assert _page(out / "contact" / "index.html").find_all("ul.contact-facts") == []
 
 
@@ -1645,37 +1661,44 @@ HTML_PAYLOAD = '<script>alert("x")</script> & <b>bold</b>'
 
 
 def test_build_site_about_lede_html_escaped(cache: Path, out: Path) -> None:
-    _build_pages(cache, out, about=HTML_PAYLOAD)
+    _build_pages(cache, out, about=_about_json(HTML_PAYLOAD))
     assert _one(_page(out / "about" / "index.html"), "p.lede").text() == HTML_PAYLOAD
 
 
 def test_build_site_about_prose_html_escaped(cache: Path, out: Path) -> None:
-    _build_pages(cache, out, about=f"Lede.\n\n{HTML_PAYLOAD}")
+    _build_pages(cache, out, about=_about_json("Lede.", HTML_PAYLOAD))
     prose = _one(_page(out / "about" / "index.html"), "div.prose")
     assert [p.text() for p in prose.find_all("p")] == [HTML_PAYLOAD]
 
 
 @pytest.mark.parametrize("page", ["about", "contact"])
 def test_build_site_text_page_html_payload_never_raw(cache: Path, out: Path, page: str) -> None:
-    _build_pages(cache, out, about=HTML_PAYLOAD, contact=f"Note: {HTML_PAYLOAD}")
+    _build_pages(
+        cache,
+        out,
+        about=_about_json(HTML_PAYLOAD),
+        contact=_contact_json(None, ("Note", HTML_PAYLOAD)),
+    )
     assert "<script>" not in _read(out / page / "index.html")
 
 
 def test_build_site_contact_fact_label_and_value_html_escaped(cache: Path, out: Path) -> None:
-    _build_pages(cache, out, contact="<i>Studio</i>: <img src=x onerror=alert(1)>")
+    _build_pages(
+        cache, out, contact=_contact_json(None, ("<i>Studio</i>", "<img src=x onerror=alert(1)>"))
+    )
     assert _facts(out) == [("<i>Studio</i>", "<img src=x onerror=alert(1)>", None)]
 
 
 def test_build_site_contact_link_with_quote_cannot_add_attributes(cache: Path, out: Path) -> None:
     url = 'https://example.com/"onmouseover="alert(1)'
-    _build_pages(cache, out, contact=f"Site: {url}")
+    _build_pages(cache, out, contact=_contact_json(None, ("Site", url)))
     link = _one(_page(out / "contact" / "index.html"), "span.contact-value a")
     assert "onmouseover" not in link.attrs
 
 
 def test_build_site_contact_link_with_quote_keeps_href_intact(cache: Path, out: Path) -> None:
     url = 'https://example.com/"onmouseover="alert(1)'
-    _build_pages(cache, out, contact=f"Site: {url}")
+    _build_pages(cache, out, contact=_contact_json(None, ("Site", url)))
     link = _one(_page(out / "contact" / "index.html"), "span.contact-value a")
     assert link.attrs.get("href") == url
 
@@ -1787,10 +1810,10 @@ def test_build_site_text_page_original_missing_raises_build_error(
     from reel.models import Manifest
 
     manifest = Manifest(
-        albums=_three_albums(cache), **{field: make_text_file(f"t-{field}", f"{field}.txt")}
+        albums=_three_albums(cache), **{field: make_text_file(f"t-{field}", f"{field}.json")}
     )
     with pytest.raises(
-        BuildError, match=rf"'{field}\.txt' is missing from .*Run `reel sync` again"
+        BuildError, match=rf"'{field}\.json' is missing from .*Run `reel sync` again"
     ):
         build_site(manifest, cache, out, "Site")
 
@@ -1799,8 +1822,8 @@ def test_build_site_text_page_missing_message_uses_drive_name(cache: Path, out: 
     from reel.build import BuildError, build_site
     from reel.models import Manifest
 
-    manifest = Manifest(albums=[], about=make_text_file("t-about", "About.TXT"))
-    with pytest.raises(BuildError, match=r"About\.TXT"):
+    manifest = Manifest(albums=[], about=make_text_file("t-about", "About.JSON"))
+    with pytest.raises(BuildError, match=r"'About\.JSON' is missing from"):
         build_site(manifest, cache, out, "Site")
 
 
@@ -1811,7 +1834,7 @@ def test_build_site_text_page_missing_keeps_previous_output(cache: Path, out: Pa
     _build_pages(cache, out)
     before = _snapshot(out)
     (cache / "originals" / "t-about").unlink()
-    manifest = Manifest(albums=_three_albums(cache), about=make_text_file("t-about", "about.txt"))
+    manifest = Manifest(albums=_three_albums(cache), about=make_text_file("t-about", "about.json"))
     with pytest.raises(BuildError):
         build_site(manifest, cache, out, "Site")
     assert _snapshot(out) == before
@@ -1821,15 +1844,22 @@ def test_build_site_text_page_unsafe_id_raises_build_error(cache: Path, out: Pat
     from reel.build import BuildError, build_site
     from reel.models import Manifest
 
-    manifest = Manifest(albums=[], contact=make_text_file("../evil", "contact.txt"))
+    manifest = Manifest(albums=[], contact=make_text_file("../evil", "contact.json"))
     with pytest.raises(BuildError):
         build_site(manifest, cache, out, "Site")
 
 
 @pytest.mark.parametrize(
     "about",
-    ["   \n\n\t\n", b"caf\xe9 \xff\xfe", b"a" * (64 * 1024 + 1)],
-    ids=["blank", "latin1", "huge"],
+    [
+        "   \n\n\t\n",
+        '{"lede": "x",',
+        '{"paragraphs": ["no lede"]}',
+        '["lede"]',
+        b"caf\xe9 \xff\xfe",
+        b"a" * (64 * 1024 + 1),
+    ],
+    ids=["blank", "invalid-json", "missing-lede", "array", "latin1", "huge"],
 )
 def test_build_site_unusable_about_text_omits_page(
     cache: Path, out: Path, about: str | bytes
@@ -1849,7 +1879,7 @@ def test_build_site_unusable_about_text_drops_nav_link(cache: Path, out: Path) -
 
 
 def test_build_site_unusable_contact_text_omits_page(cache: Path, out: Path) -> None:
-    _build_pages(cache, out, contact="Email: not-an-email\nnonsense line")
+    _build_pages(cache, out, contact=_contact_json("not-an-email"))
     assert not (out / "contact").exists()
 
 
@@ -1857,14 +1887,14 @@ def test_build_site_unusable_contact_text_logs_warning(
     cache: Path, out: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.WARNING)
-    _build_pages(cache, out, contact="nonsense line")
+    _build_pages(cache, out, contact=UNPARSEABLE)
     assert any(record.levelno == logging.WARNING for record in caplog.records)
 
 
 # build_site: CONTACT_FORM_URL without a usable contact page
 
 FORM_WITHOUT_CONTACT_WARNING = (
-    "CONTACT_FORM_URL is set but there is no usable contact.txt; the form is not shown."
+    "CONTACT_FORM_URL is set but there is no usable contact.json; the form is not shown."
 )
 
 
@@ -1888,7 +1918,7 @@ def test_build_site_form_url_with_unparseable_contact_warns(
     cache: Path, out: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.WARNING)
-    _build_pages(cache, out, contact="nonsense line", contact_form_url=FORM_URL)
+    _build_pages(cache, out, contact=UNPARSEABLE, contact_form_url=FORM_URL)
     assert _form_warnings(caplog) == [FORM_WITHOUT_CONTACT_WARNING]
 
 
@@ -1913,10 +1943,52 @@ def test_build_site_form_url_unset_without_contact_does_not_warn(
     assert _form_warnings(caplog) == []
 
 
-@pytest.mark.parametrize("contact", [None, "nonsense line"], ids=["missing", "unparseable"])
+@pytest.mark.parametrize("contact", [None, UNPARSEABLE], ids=["missing", "unparseable"])
 def test_build_site_form_url_never_logged(
     cache: Path, out: Path, caplog: pytest.LogCaptureFixture, contact: str | None
 ) -> None:
     caplog.set_level(logging.DEBUG)
     _build_pages(cache, out, contact=contact, contact_form_url=FORM_URL)
     assert not any("forms.example.test" in record.getMessage() for record in caplog.records)
+
+
+def test_build_site_invalid_contact_json_still_builds_other_pages(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=_contact_json(None, ("", "x")))
+    assert (out / "about" / "index.html").is_file()
+
+
+def test_build_site_invalid_contact_json_omits_page(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, contact=_contact_json(None, ("", "x")))
+    assert not (out / "contact").exists()
+
+
+def test_build_site_invalid_json_warning_names_drive_file(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from reel.build import build_site
+    from reel.models import Manifest
+
+    caplog.set_level(logging.WARNING)
+    write_text_original(cache, "t-about", '{"lede": "x",')
+    build_site(Manifest(albums=[], about=make_text_file("t-about", "About.JSON")), cache, out, "S")
+    assert any("Skipping 'About.JSON': not valid JSON" in message for message in caplog.messages)
+
+
+def test_build_site_form_url_with_empty_contact_json_warns(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _build_pages(cache, out, contact=_contact_json(""), contact_form_url=FORM_URL)
+    assert _form_warnings(caplog) == [FORM_WITHOUT_CONTACT_WARNING]
+
+
+LONG_NUMBER_ABOUT = '{"lede": "x", "_comment": ' + "9" * 5000 + "}"
+
+
+def test_build_site_about_with_overlong_number_omits_page(cache: Path, out: Path) -> None:
+    _build_pages(cache, out, about=LONG_NUMBER_ABOUT)
+    assert not (out / "about").exists()
+
+
+def test_build_site_about_with_overlong_number_still_builds(cache: Path, out: Path) -> None:
+    assert _build_pages(cache, out, about=LONG_NUMBER_ABOUT) == 3

@@ -21,8 +21,8 @@ from tests.fixtures.pages import make_text_file, write_text_original
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = REPO_ROOT / "docs" / "examples"
-ABOUT_EXAMPLE = EXAMPLES / "about.txt"
-CONTACT_EXAMPLE = EXAMPLES / "contact.txt"
+ABOUT_EXAMPLE = EXAMPLES / "about.json"
+CONTACT_EXAMPLE = EXAMPLES / "contact.json"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 EXPECTED_ENTRIES = (
     ContactEntry("Instagram", "instagram.com/yourhandle", "https://instagram.com/yourhandle"),
@@ -33,13 +33,13 @@ EXPECTED_ENTRIES = (
 
 
 def _about() -> AboutPage | None:
-    text = read_page_text(ABOUT_EXAMPLE, "about.txt")
-    return parse_about(text) if text is not None else None
+    text = read_page_text(ABOUT_EXAMPLE, "about.json")
+    return parse_about(text, "about.json") if text is not None else None
 
 
 def _contact() -> ContactPage | None:
-    text = read_page_text(CONTACT_EXAMPLE, "contact.txt")
-    return parse_contact(text) if text is not None else None
+    text = read_page_text(CONTACT_EXAMPLE, "contact.json")
+    return parse_contact(text, "contact.json") if text is not None else None
 
 
 def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
@@ -92,8 +92,8 @@ def _build_with_examples(tmp_path: Path) -> Path:
     write_text_original(cache, "t-contact", CONTACT_EXAMPLE.read_bytes())
     manifest = Manifest(
         albums=[],
-        about=make_text_file("t-about", "about.txt"),
-        contact=make_text_file("t-contact", "contact.txt"),
+        about=make_text_file("t-about", "about.json"),
+        contact=make_text_file("t-contact", "contact.json"),
     )
     build_site(manifest, cache, out, "Site")
     return out

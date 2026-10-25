@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-/** Must match ABOUT_TEXT, CONTACT_TEXT, and CONTACT_FORM_URL in e2e/serve_fixture.py. */
+/** Must match ABOUT_JSON, CONTACT_JSON, and CONTACT_FORM_URL in e2e/serve_fixture.py. */
 const ABOUT_LEDE = "I photograph quiet places at the edges of cities, mostly at dusk.";
 const ABOUT_PARAGRAPHS = [
   "Most of this work is made on medium-format film and printed by hand in a small darkroom.",
