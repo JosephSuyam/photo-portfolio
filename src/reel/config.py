@@ -3,12 +3,15 @@
 import os
 from collections.abc import Mapping
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
+_URL_FORBIDDEN_CHARS = frozenset("\"'<>")
+
 
 class ConfigError(Exception):
-    """Raised when required settings are missing."""
+    """Raised when required settings are missing or invalid."""
 
 
 class SiteSettings(BaseModel):
@@ -16,6 +19,7 @@ class SiteSettings(BaseModel):
 
     site_title: str = "Portfolio"
     site_base_url: str = "http://localhost:8000"
+    contact_form_url: str | None = None
 
 
 class Settings(SiteSettings):
@@ -65,7 +69,10 @@ def load_settings(
 def load_site_settings(
     env_file: Path = Path(".env"), environ: Mapping[str, str] | None = None
 ) -> SiteSettings:
-    """Site settings from `env_file` and the environment; Drive settings are not required."""
+    """Site settings from `env_file` and the environment; Drive settings are not required.
+
+    Raises ConfigError if CONTACT_FORM_URL is set but not an https:// URL.
+    """
     return SiteSettings(**_site_values(_merged_values(env_file, environ)))
 
 
@@ -75,10 +82,28 @@ def _merged_values(env_file: Path, environ: Mapping[str, str] | None) -> dict[st
     return values
 
 
+def is_valid_form_url(url: str) -> bool:
+    """Whether `url` is a plain https:// URL that is safe to put in a form `action`."""
+    if any(
+        char.isspace() or not char.isprintable() or char in _URL_FORBIDDEN_CHARS for char in url
+    ):
+        return False
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    return parsed.scheme.lower() == "https" and bool(parsed.netloc)
+
+
 def _site_values(values: Mapping[str, str]) -> dict[str, str]:
     # Empty values mean "unset" so the model defaults apply.
     optional = {
         "site_title": values.get("SITE_TITLE"),
         "site_base_url": values.get("SITE_BASE_URL"),
+        "contact_form_url": values.get("CONTACT_FORM_URL"),
     }
-    return {key: value for key, value in optional.items() if value}
+    present = {key: value for key, value in optional.items() if value}
+    # Never echo the value: the form URL can embed a private form id or token.
+    if "contact_form_url" in present and not is_valid_form_url(present["contact_form_url"]):
+        raise ConfigError("CONTACT_FORM_URL must be an https:// URL.")
+    return present
