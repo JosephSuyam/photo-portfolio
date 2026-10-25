@@ -11,6 +11,7 @@ import re
 import shutil
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
@@ -27,12 +28,22 @@ BUILD_MARKER = ".reel-build"
 IMAGES_DIR = "images"
 STATIC_DIR = Path(__file__).parent / "static"
 
-# Rendered image heights on desktop and widths on phones; keep in sync with site.css.
+# Rendered cover heights on desktop and widths on phones; keep in sync with site.css.
 INDEX_COVER_HEIGHT_VH = 70
-ALBUM_PHOTO_HEIGHT_VH = 80
 INDEX_COVER_MOBILE_VW = 50
-ALBUM_PHOTO_MOBILE_VW = 80
 MOBILE_MAX_WIDTH_PX = 767
+
+# Album mosaic on a 4-column grid of square cells; keep in sync with site.css.
+# Each 4-photo group fills a 4x2 block, alternating sides so the big tile zigzags.
+MOSAIC_GROUP_SIZE = 4
+MOSAIC_GROUPS = (("big", "small", "small", "wide"), ("wide", "big", "small", "small"))
+MOSAIC_REMAINDERS = {
+    1: (("full",), ("full",)),
+    2: (("big", "big"), ("big", "big")),
+    3: (("big", "wide", "wide"), ("wide", "big", "wide")),
+}
+# Shape -> (tile width in vw on desktop, tile width / height).
+MOSAIC_TILES = {"small": (25, 1), "wide": (50, 2), "big": (50, 1), "full": (100, 2)}
 
 _SLUG_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 
@@ -121,6 +132,29 @@ def sizes(variant: ImageVariant, height_vh: int, mobile_width_vw: int) -> str:
     """`sizes` value for an image `height_vh` tall on desktops, `mobile_width_vw` wide on phones."""
     desktop_width_vh = math.ceil(height_vh * variant.width / variant.height)
     return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) {mobile_width_vw}vw, {desktop_width_vh}vh"
+
+
+def mosaic_shapes(count: int) -> list[str]:
+    """Tile shape for each of `count` photos, filling whole 4x2 blocks of the mosaic."""
+    if count < 0:
+        raise ValueError(f"Photo count must not be negative, got {count}.")
+    full_groups, remainder = divmod(count, MOSAIC_GROUP_SIZE)
+    shapes = [shape for g in range(full_groups) for shape in MOSAIC_GROUPS[g % 2]]
+    if remainder:
+        shapes.extend(MOSAIC_REMAINDERS[remainder][full_groups % 2])
+    return shapes
+
+
+def mosaic_sizes(variant: ImageVariant, shape: str) -> str:
+    """`sizes` value for a photo cropped to fill a `shape` tile; full width on phones."""
+    try:
+        tile_width_vw, tile_aspect = MOSAIC_TILES[shape]
+    except KeyError:
+        raise ValueError(f"Unknown mosaic shape {shape!r}.") from None
+    # A photo wider than its tile is cropped at the sides, so it renders wider than the tile.
+    # Fraction keeps exact multiples exact; floats can push them just past an integer.
+    overflow = max(Fraction(1), Fraction(variant.width, variant.height * tile_aspect))
+    return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) 100vw, {math.ceil(tile_width_vw * overflow)}vw"
 
 
 def next_album_index(index: int, count: int) -> int | None:
@@ -292,39 +326,37 @@ def _index_entry(album: PublishedAlbum, base_path: str) -> dict[str, object]:
             album.cover,
             base_path,
             fallback=album.cover.thumbnail,
-            height_vh=INDEX_COVER_HEIGHT_VH,
-            mobile_width_vw=INDEX_COVER_MOBILE_VW,
+            sizes_value=sizes(album.cover.display, INDEX_COVER_HEIGHT_VH, INDEX_COVER_MOBILE_VW),
         ),
     }
 
 
 def _album_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
     photos = [
-        _image_context(
-            photo,
-            base_path,
-            fallback=photo.display,
-            height_vh=ALBUM_PHOTO_HEIGHT_VH,
-            mobile_width_vw=ALBUM_PHOTO_MOBILE_VW,
-        )
-        for photo in album.photos
+        {
+            **_image_context(
+                photo,
+                base_path,
+                fallback=photo.display,
+                sizes_value=mosaic_sizes(photo.display, shape),
+            ),
+            "shape": shape,
+            "href": image_url(base_path, photo.display.jpeg_name),
+        }
+        for photo, shape in zip(album.photos, mosaic_shapes(len(album.photos)), strict=True)
     ]
     return {"title": album.title, "photos": photos}
 
 
 def _image_context(
-    photo: ProcessedPhoto,
-    base_path: str,
-    fallback: ImageVariant,
-    height_vh: int,
-    mobile_width_vw: int,
+    photo: ProcessedPhoto, base_path: str, fallback: ImageVariant, sizes_value: str
 ) -> dict[str, object]:
     variants = (photo.thumbnail, photo.display)
     return {
         "src": image_url(base_path, fallback.jpeg_name),
         "webp_srcset": srcset((image_url(base_path, v.webp_name), v.width) for v in variants),
         "jpeg_srcset": srcset((image_url(base_path, v.jpeg_name), v.width) for v in variants),
-        "sizes": sizes(photo.display, height_vh, mobile_width_vw),
+        "sizes": sizes_value,
         "width": photo.display.width,
         "height": photo.display.height,
     }

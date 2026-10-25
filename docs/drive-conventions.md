@@ -14,7 +14,11 @@ Portfolio/            <- root folder (DRIVE_ROOT_FOLDER_ID)
 - Albums are ordered by folder name, naturally ("Book 2" before "Book 10"). Prefix with numbers
   (`01 Book I`) to force an order.
 - The album title shown on the site is the folder name exactly as written, prefix included.
-- Photos are ordered by filename, naturally.
+- Photos are ordered by filename, naturally. The order decides the album page layout: photos
+  are cropped into a mosaic (shown whole in the lightbox and on phones), and the 1st and 6th
+  of every 8 get the big tiles. Put the photos that should be big in those positions. If
+  the count isn't a multiple of 4, the last 1-3 photos get larger tiles (one leftover is full
+  width) so there are no gaps.
 - The cover is a file named `cover.*`, otherwise the first photo.
 - Supported: JPEG, PNG, WebP. Other files and shortcuts are skipped.
 - Each album's URL slug comes from its title ("01 Book I" -> `/01-book-i/`). If two albums

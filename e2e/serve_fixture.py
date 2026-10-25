@@ -2,8 +2,11 @@
 
 Usage: uv run python e2e/serve_fixture.py --port 8123
 
-The fixture has three albums (the first with an explicit cover.* file) of gradient images in
-mixed orientations. It never touches Google Drive or the network.
+The fixture has five albums (the first with an explicit cover.* file) of gradient images in
+mixed orientations. "Landscapes" has eleven photos: both mosaic groups ([big, small, small, wide]
+and [wide, big, small, small]) plus a remainder of three. "Still Life", the last, has a single
+photo. Every (size, colour) pair is unique, so no two photos share a content-hashed file.
+It never touches Google Drive or the network.
 """
 
 import argparse
@@ -26,8 +29,27 @@ _MODIFIED = datetime(2026, 1, 1, tzinfo=UTC)
 # (album title, slug, [(width, height), ...], has cover file)
 ALBUMS = [
     ("Book I", "book-i", [(1600, 2400), (2400, 1600), (1600, 2400)], True),
-    ("Book II", "book-ii", [(2400, 1600), (1600, 2400)], False),
-    ("Portraits", "portraits", [(1600, 2000), (1600, 2000), (2400, 1600), (1600, 2400)], False),
+    ("Book II", "book-ii", [(2600, 1600), (1700, 2400)], False),
+    ("Portraits", "portraits", [(1600, 2100), (1600, 2000), (2400, 1700), (1600, 2500)], False),
+    (
+        "Landscapes",
+        "landscapes",
+        [
+            (2400, 1600),
+            (1600, 2400),
+            (1800, 1800),
+            (2400, 1200),
+            (1600, 2000),
+            (2400, 1600),
+            (1200, 1800),
+            (1800, 1200),
+            (2000, 1500),
+            (1500, 2000),
+            (2200, 1400),
+        ],
+        False,
+    ),
+    ("Still Life", "still-life", [(2000, 1400)], False),
 ]
 _COLORS = [
     ((200, 80, 60), (40, 30, 80)),

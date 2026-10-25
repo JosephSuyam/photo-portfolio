@@ -9,7 +9,7 @@
   <script src="{{ base_path }}static/{{ name }}" defer></script>
   {% endfor %}
 </head>
-<body>
+<body{% if page_class %} class="{{ page_class }}"{% endif %}>
   <header class="site-header">
     <nav class="site-nav">
       <a href="{{ base_path }}work/"{% if nav_work_current %} aria-current="page"{% endif %}>Work</a>
