@@ -32,7 +32,7 @@ A photographer portfolio modeled on https://reel.format.com/, generated from a G
 - `reel build` compiles `src/reel/ts/` into `dist/static/`; compiled JS is never committed. Without Node it warns and builds without the script.
 
 ## How we work
-The main session plans, delegates, verifies, and summarizes; only it delegates. Agents: `implementer` (code), `test-writer` (pytest + Playwright), `debugger`, `code-reviewer`, `doc-writer`; skills: `orchestrate` (runs a whole task through this workflow: `/orchestrate <task>`), `run-tests` (Full check), `preview-site` (screenshots). Delegate large or noisy work with goal, paths, constraints, and output format; do small edits yourself.
+The `orchestrator` agent (`claude --agent orchestrator`, or `/orchestrate <task>` from any session) plans, delegates, verifies, and summarizes; only it delegates (other agents have no Agent tool). Agents: `implementer` (code), `test-writer` (pytest + Playwright), `debugger`, `code-reviewer`, `doc-writer`; skills: `run-tests` (Full check), `preview-site` (screenshots). Delegate large or noisy work with goal, paths, constraints, and output format; do small edits yourself.
 
 1. Understand; ask if ambiguous; plan briefly for 3+ files or a public interface.
 2. Tests first (bug fixes start with a failing test), then the smallest change that works.
