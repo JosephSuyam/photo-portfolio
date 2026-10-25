@@ -32,7 +32,7 @@ class Album(BaseModel):
 
 
 class TextFile(BaseModel):
-    """A plain-text page source in the Drive root (about.txt, contact.txt)."""
+    """A page source file in the Drive root (about.json, contact.json)."""
 
     file_id: str
     name: str

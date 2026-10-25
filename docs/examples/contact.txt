@@ -1,8 +1,0 @@
-# One "Label: value" per line. Lines starting with # are ignored.
-# The first Email line is shown large at the top of the Contact page.
-# Values starting with https:// or http:// become links; other email addresses become mailto links.
-Email: hello@example.com
-Instagram: https://instagram.com/yourhandle
-Website: https://example.com
-Based in: Example City, Country
-Available for: Commissions, editorial, prints

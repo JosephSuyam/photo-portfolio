@@ -239,7 +239,7 @@ def build_site(
     contact = _load_page(manifest.contact, cache_dir, parse_contact)
     if contact_form_url and contact is None:
         logger.warning(
-            "CONTACT_FORM_URL is set but there is no usable contact.txt; the form is not shown."
+            "CONTACT_FORM_URL is set but there is no usable contact.json; the form is not shown."
         )
     scripts = sorted(scripts_dir.glob("*.js")) if scripts_dir else []
     _ensure_replaceable(out_dir)
@@ -353,7 +353,7 @@ def _process(
 
 
 def _load_page[T](
-    text_file: TextFile | None, cache_dir: Path, parse: Callable[[str], T | None]
+    text_file: TextFile | None, cache_dir: Path, parse: Callable[[str, str], T | None]
 ) -> T | None:
     """Parsed page from the cached text file; None if there is none or it is unusable."""
     if text_file is None:
@@ -370,7 +370,7 @@ def _load_page[T](
         text = read_page_text(source, text_file.name)
     except OSError as error:
         raise BuildError(f"Cannot read {text_file.name!r}: {error}") from error
-    return None if text is None else parse(text)
+    return None if text is None else parse(text, text_file.name)
 
 
 def _render_site(

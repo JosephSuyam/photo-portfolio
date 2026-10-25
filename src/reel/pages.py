@@ -1,15 +1,18 @@
-"""Parse the root `about.txt` and `contact.txt` into the About and Contact pages.
+"""Parse the root `about.json` and `contact.json` into the About and Contact pages.
 
 Everything here is pure except `read_page_text`. The text comes from Drive and is untrusted:
-it is returned as plain strings for the autoescaping templates, and only `http(s)://` and
-email values ever become links.
+it is returned as plain strings for the autoescaping templates, only `http(s)://` and email
+values ever become links, and warnings never quote the file's contents.
 """
 
+import json
 import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +20,36 @@ MAX_PAGE_BYTES = 64 * 1024
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 _URL_SCHEMES = frozenset({"https", "http"})
+_MAX_REPORTED_ERRORS = 3
+# JSON has no comments, so unknown keys such as "_comment" are ignored rather than rejected.
+_PAGE_FILE_CONFIG = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+
+class AboutFile(BaseModel):
+    """The schema of about.json."""
+
+    model_config = _PAGE_FILE_CONFIG
+
+    lede: str = Field(min_length=1)
+    paragraphs: list[str] = []
+
+
+class ContactDetail(BaseModel):
+    """One labelled entry in contact.json."""
+
+    model_config = _PAGE_FILE_CONFIG
+
+    label: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+
+
+class ContactFile(BaseModel):
+    """The schema of contact.json."""
+
+    model_config = _PAGE_FILE_CONFIG
+
+    email: str | None = None
+    details: list[ContactDetail] = []
 
 
 @dataclass(frozen=True)
@@ -29,7 +62,7 @@ class AboutPage:
 
 @dataclass(frozen=True)
 class ContactEntry:
-    """One "Label: value" line; `href` is set only for email and http(s) values."""
+    """One contact detail; `href` is set only for email and http(s) values."""
 
     label: str
     text: str
@@ -62,51 +95,83 @@ def read_page_text(path: Path, name: str) -> str | None:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def parse_about(text: str) -> AboutPage | None:
-    """Split `text` into paragraphs at blank lines; None if it has no text at all.
+def parse_about(text: str, name: str = "about.json") -> AboutPage | None:
+    """The About page from about.json text, or None (with a warning) if it is unusable.
 
-    Each paragraph is one line with whitespace collapsed. The first becomes the lede.
+    `name` is the Drive file name, used in warnings. Whitespace runs are collapsed and blank
+    paragraphs dropped.
     """
-    paragraphs: list[str] = []
-    current: list[str] = []
-    for line in [*text.split("\n"), ""]:
-        if line.strip():
-            current.append(line)
-        elif current:
-            paragraphs.append(" ".join(" ".join(current).split()))
-            current = []
-    if not paragraphs:
+    about = _load_page_file(AboutFile, text, name)
+    if about is None:
         return None
-    return AboutPage(lede=paragraphs[0], paragraphs=tuple(paragraphs[1:]))
+    lede = _collapse(about.lede)
+    if not lede:
+        logger.warning("Skipping %r: lede: has no visible text", name)
+        return None
+    paragraphs = tuple(
+        collapsed for paragraph in about.paragraphs if (collapsed := _collapse(paragraph))
+    )
+    return AboutPage(lede=lede, paragraphs=paragraphs)
 
 
-def parse_contact(text: str) -> ContactPage | None:
-    """Read "Label: value" lines into the Contact page; None if nothing usable is left.
+def parse_contact(text: str, name: str = "contact.json") -> ContactPage | None:
+    """The Contact page from contact.json text, or None (with a warning) if it is unusable.
 
-    Blank lines and `#` comments are skipped; malformed lines are skipped with a warning.
-    The first valid `Email:` line becomes the headline address.
+    `name` is the Drive file name, used in warnings. An invalid headline email is dropped
+    with a warning; the details are kept in file order.
     """
-    email: str | None = None
-    entries: list[ContactEntry] = []
-    for number, raw_line in enumerate(text.split("\n"), start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        label, colon, value = (part.strip() for part in line.partition(":"))
-        if not colon or not label or not value:
-            logger.warning('Skipping line %d of contact.txt: expected "Label: value"', number)
-            continue
-        if label.casefold() == "email":
-            if not EMAIL_PATTERN.fullmatch(value):
-                logger.warning("Skipping line %d of contact.txt: not an email address", number)
-                continue
-            if email is None:
-                email = value
-                continue
-        entries.append(_contact_entry(label, value))
+    contact = _load_page_file(ContactFile, text, name)
+    if contact is None:
+        return None
+    email = contact.email or None
+    if email is not None and not EMAIL_PATTERN.fullmatch(email):
+        logger.warning("Ignoring the email in %r: not an email address", name)
+        email = None
+    entries = tuple(_contact_entry(detail.label, detail.value) for detail in contact.details)
     if email is None and not entries:
+        logger.warning("Skipping %r: no email or details", name)
         return None
-    return ContactPage(email=email, entries=tuple(entries))
+    return ContactPage(email=email, entries=entries)
+
+
+def _load_page_file[M: BaseModel](model: type[M], text: str, name: str) -> M | None:
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as error:
+        logger.warning(
+            "Skipping %r: not valid JSON (line %d, column %d)", name, error.lineno, error.colno
+        )
+        return None
+    except RecursionError:
+        logger.warning("Skipping %r: not valid JSON (nested too deeply)", name)
+        return None
+    except ValueError:
+        # Python refuses integers longer than its digit limit; the message would echo them.
+        logger.warning("Skipping %r: not valid JSON (a number is too long)", name)
+        return None
+    try:
+        return model.model_validate(data)
+    except ValidationError as error:
+        logger.warning("Skipping %r: %s", name, _describe_errors(error))
+        return None
+
+
+def _describe_errors(error: ValidationError) -> str:
+    """Error locations and messages only: `str(error)` and `input` would echo the file."""
+    details = error.errors(include_url=False, include_context=False, include_input=False)
+    parts = [
+        f"{'.'.join(str(part) for part in detail['loc']) or '(root)'}: {detail['msg']}"
+        for detail in details[:_MAX_REPORTED_ERRORS]
+    ]
+    if len(details) > _MAX_REPORTED_ERRORS:
+        parts.append("...")
+    return "; ".join(parts)
+
+
+def _collapse(text: str) -> str:
+    """Whitespace runs as one space, without invisible controls such as NUL or bidi overrides."""
+    visible = "".join(char for char in text if char.isprintable() or char.isspace())
+    return " ".join(visible.split())
 
 
 def _contact_entry(label: str, value: str) -> ContactEntry:

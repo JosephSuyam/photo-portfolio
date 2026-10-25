@@ -19,14 +19,15 @@ from reel.models import Album, Manifest, Photo, TextFile, original_path
 logger = logging.getLogger(__name__)
 
 SUPPORTED_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
-ABOUT_NAME = "about.txt"
-CONTACT_NAME = "contact.txt"
+ABOUT_NAME = "about.json"
+CONTACT_NAME = "contact.json"
 MANIFEST_NAME = "manifest.json"
 ORIGINALS_DIR = "originals"
 
 _DIGITS = re.compile(r"(\d+)")
 _NON_SLUG_CHARS = re.compile(r"[^a-z0-9]+")
 _FALLBACK_SLUG = "album"
+_GOOGLE_APPS_MIME_PREFIX = "application/vnd.google-apps."
 
 type Original = Photo | TextFile
 
@@ -181,7 +182,7 @@ def _find_text_file(root_entries: Sequence[DriveFile], page_name: str) -> TextFi
         (entry for entry in root_entries if entry.name.strip().casefold() == page_name),
         key=_drive_order,
     )
-    usable = [entry for entry in matches if _is_usable_text_file(entry)]
+    usable = [entry for entry in matches if _is_usable_page_file(entry)]
     for extra in usable[1:]:
         logger.warning("Skipping %r: using an earlier %s instead", extra.name, page_name)
     if not usable:
@@ -196,13 +197,21 @@ def _find_text_file(root_entries: Sequence[DriveFile], page_name: str) -> TextFi
     )
 
 
-def _is_usable_text_file(entry: DriveFile) -> bool:
-    """Whether `entry` is a downloadable plain-text file; logs why others are skipped."""
+def _is_usable_page_file(entry: DriveFile) -> bool:
+    """Whether `entry` can be downloaded as-is; logs why others are skipped.
+
+    Matching is by name only: Drive labels .json files as application/json, text/plain, or
+    application/octet-stream depending on how they were uploaded.
+    """
     if entry.is_folder or entry.is_shortcut:
-        logger.warning("Skipping %r: not a plain text file", entry.name)
+        logger.warning("Skipping %r: not a file", entry.name)
         return False
-    if not entry.mime_type.startswith("text/"):
-        logger.warning("Skipping %r: unsupported type %s", entry.name, entry.mime_type)
+    if entry.mime_type.startswith(_GOOGLE_APPS_MIME_PREFIX):
+        logger.warning(
+            "Skipping %r: Google Drive converted it (%s); upload it with conversion turned off",
+            entry.name,
+            entry.mime_type,
+        )
         return False
     try:
         original_path(Path(), entry.id)
