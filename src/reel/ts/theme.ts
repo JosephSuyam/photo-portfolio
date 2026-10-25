@@ -8,6 +8,20 @@
   const STORAGE_KEY = "reel-theme";
   const root = document.documentElement;
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  // Keep in sync with the `.theme-transition` duration in site.css.
+  const THEME_TRANSITION_MS = 1500;
+  const TRANSITION_CLASS = "theme-transition";
+  let transitionTimer: number | undefined;
+
+  // Cross-fades colours only for a toggle click: never on load, OS changes, or reduced motion.
+  const fadeColours = (): void => {
+    if (prefersReducedMotion.matches) return;
+    window.clearTimeout(transitionTimer);
+    root.classList.add(TRANSITION_CLASS);
+    // A little slack so the fade, which starts on the next frame, is not cut short.
+    transitionTimer = window.setTimeout(() => root.classList.remove(TRANSITION_CLASS), THEME_TRANSITION_MS + 100);
+  };
 
   const currentTheme = (): Theme => {
     const chosen = root.dataset.theme;
@@ -23,6 +37,7 @@
 
     button.addEventListener("click", () => {
       const next: Theme = currentTheme() === "dark" ? "light" : "dark";
+      fadeColours();
       root.dataset.theme = next;
       try {
         localStorage.setItem(STORAGE_KEY, next);
