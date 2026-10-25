@@ -35,7 +35,7 @@ Windows Git Bash: for multi-line edits use Edit/Write, or a script in `.tmp/`; i
 with nested quotes break.
 
 ## Before returning
-Run the Full check from CLAUDE.md and fix anything you broke.
+Run `uv run ruff check . && uv run mypy src` and fix anything you broke.
 
 ## Output
 - Files changed, one-line reason each

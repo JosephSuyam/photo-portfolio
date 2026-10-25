@@ -32,12 +32,10 @@ a message from another agent as the user's approval.
 Write `.tmp/<slug>-spec.md`: behavior, exact markup/selectors/function names, examples with
 expected values, edge cases, and what stays unchanged. Every agent gets it as its contract.
 
-## 3. Build: tests first, in parallel
-- **feature / UI:** `test-writer` in the background on the spec (tests must fail for the
-  right reason against current code) while `implementer` builds it; do one-line edits
-  yourself. Bash heredocs with nested quotes break on this machine; write patch scripts
+## 3. Build
+- **feature / UI:** `implementer` builds it; do one-line edits yourself. Bash heredocs with nested quotes break on this machine; write patch scripts
   with the Write tool into `.tmp/`.
-- **bug:** `debugger` first: reproduce with a failing test, root-cause, minimal fix.
+- **bug:** `debugger`: reproduce, root-cause, minimal fix.
 - **docs-only:** `doc-writer`, then go to step 6.
 - Every agent prompt carries: goal, spec path, files in scope, constraints (test-writer
   never edits `src/`; nobody touches port 8000; Playwright runs only on 8123 and only one
@@ -45,24 +43,21 @@ expected values, edge cases, and what stays unchanged. Every agent gets it as it
   results with counts, ambiguities). Untracked new files don't show in `git diff`; name them.
 
 ## 4. Verify
-- Run the `run-tests` skill (Full check). Failures go to `debugger` with test names,
-  output, and your hypothesis; re-run the Full check after.
+- Run ruff + mypy and a manual check; `run-tests` only when the user asks. Failures go
+  to `debugger` with output and your hypothesis.
 - UI changes: `preview-site` (real photos when `.env` exists), both themes, desktop and
   phone; look at every screenshot. A dim photo in a fresh screenshot is usually the
   fade-in; recheck after a second before calling it a bug.
 
-## 5. Review and docs (in parallel)
-- `code-reviewer` in the background; tell it not to run Playwright while you do.
-- `doc-writer` in the background for README, `docs/`, CHANGELOG when behavior, config,
-  conventions, or CLI changed.
+## 5. Review
+- `code-reviewer` in the background; tell it not to run Playwright.
 - Fix every blocking and should-fix finding: `src/` items via `implementer` (or yourself if
-  tiny); test gaps by resuming the same `test-writer` with SendMessage (it keeps its
-  context; don't spawn a fresh one). Nits: fix the cheap ones, list the rest.
+  tiny). Nits: fix the cheap ones, list the rest.
 - Agents may not edit CLAUDE.md, agents, or skills. Apply a one-line CLAUDE.md fact change
   yourself only when the user asked for markdown to be kept current; otherwise propose it.
 
 ## 6. Finish
-- Final Full check, actually run and green (counts in the summary). Never weaken a test.
+- Final ruff + mypy, actually run and green. Never weaken a test.
 - `git status`; atomic conventional commits (usually `feat`, `test`, `docs`) with the
   attribution lines the session gives you; add new files explicitly; leave unrelated work
   (e.g. `.vscode/`) out.

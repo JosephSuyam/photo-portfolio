@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Hand a task to the orchestrator agent, which drives it end to end through the project workflow (tests first, implementation, Full check, preview, review, docs, commits) and reports one summary. Use when the user says /orchestrate or "orchestrate" in a session that isn't already running as the orchestrator.
+description: Hand a task to the orchestrator agent, which drives it end to end through the project workflow (implementation, lint/type check, preview, review, commits) and reports one summary. Use when the user says /orchestrate or "orchestrate" in a session that isn't already running as the orchestrator.
 argument-hint: <task in plain words>
 ---
 

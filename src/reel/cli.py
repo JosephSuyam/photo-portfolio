@@ -1,7 +1,9 @@
-"""Command-line entry point: `reel sync | build | serve | all`."""
+"""Command-line entry point: `reel sync | build | serve | watch | all`."""
 
 import logging
 import tempfile
+import threading
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -15,6 +17,7 @@ from reel.drive import DriveError, GoogleDriveClient
 from reel.scripts import NodeNotFoundError, ScriptError, compile_scripts
 from reel.server import make_preview_server
 from reel.sync import sync_portfolio
+from reel.watch import WatchSession, needs_script_compile, run_build, watch
 
 CACHE_DIR = Path(".cache")
 DIST_DIR = Path("dist")
@@ -61,31 +64,42 @@ def sync() -> None:
 
 
 @app.command()
-def build() -> None:
+def build(
+    scripts_dir: Annotated[
+        Path | None,
+        typer.Option(hidden=True, help="Use these compiled scripts instead of compiling."),
+    ] = None,
+) -> None:
     """Render the site from the local cache into dist/."""
     try:
-        settings = load_site_settings()
-        manifest = load_manifest(CACHE_DIR / "manifest.json")
-        with tempfile.TemporaryDirectory(prefix="reel-scripts-") as temp_dir:
-            scripts_dir: Path | None = Path(temp_dir)
-            try:
-                compile_scripts(Path(temp_dir))
-            except NodeNotFoundError as error:
-                typer.echo(f"Warning: {error} Building without the site script.", err=True)
-                scripts_dir = None
-            count = build_site(
-                manifest,
-                CACHE_DIR,
-                DIST_DIR,
-                settings.site_title,
-                base_path_from_url(settings.site_base_url),
-                scripts_dir=scripts_dir,
-                contact_form_url=settings.contact_form_url,
-            )
+        if scripts_dir is not None:
+            count = _build_with_scripts(scripts_dir)
+        else:
+            with tempfile.TemporaryDirectory(prefix="reel-scripts-") as temp_dir:
+                compiled: Path | None = Path(temp_dir)
+                try:
+                    compile_scripts(Path(temp_dir))
+                except NodeNotFoundError as error:
+                    typer.echo(f"Warning: {error} Building without the site script.", err=True)
+                    compiled = None
+                count = _build_with_scripts(compiled)
     except (BuildError, ConfigError, ScriptError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error
     typer.echo(f"Built {count} album{'' if count == 1 else 's'} into {DIST_DIR}/")
+
+
+def _build_with_scripts(scripts_dir: Path | None) -> int:
+    settings = load_site_settings()
+    return build_site(
+        load_manifest(CACHE_DIR / "manifest.json"),
+        CACHE_DIR,
+        DIST_DIR,
+        settings.site_title,
+        base_path_from_url(settings.site_base_url),
+        scripts_dir=scripts_dir,
+        contact_form_url=settings.contact_form_url,
+    )
 
 
 @app.command()
@@ -100,6 +114,56 @@ def serve(
     with make_preview_server(directory, port) as server:
         typer.echo(f"Serving {directory}/ on http://localhost:{port}")
         server.serve_forever()
+
+
+@app.command(name="watch")
+def watch_command(
+    port: Annotated[
+        int | None,
+        typer.Option(help="Also serve dist/ on this port (leave unset if `reel serve` runs)."),
+    ] = None,
+) -> None:
+    """Rebuild the site whenever templates, CSS, TypeScript, Python, or the cache change.
+
+    Pages built here reload themselves in the browser after each successful rebuild;
+    `reel build` output never includes that script.
+    """
+    watched = [Path(__file__).parent, CACHE_DIR / "manifest.json", Path(".env")]
+    with tempfile.TemporaryDirectory(prefix="reel-watch-") as temp_dir:
+        session = WatchSession(Path(temp_dir))
+        _rebuild(session, changes=None)
+        if port is not None:
+            server = make_preview_server(DIST_DIR, port)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            typer.echo(f"Serving {DIST_DIR}/ on http://localhost:{port}")
+        typer.echo("Watching for changes (Ctrl+C to stop)...")
+
+        def on_change(changes: list[Path]) -> None:
+            shown = ", ".join(path.name for path in changes[:3])
+            more = f" and {len(changes) - 3} more" if len(changes) > 3 else ""
+            typer.echo(f"\nChanged: {shown}{more}")
+            _rebuild(session, changes)
+
+        try:
+            watch(watched, on_change)
+        except KeyboardInterrupt:
+            typer.echo("Stopped watching.")
+
+
+def _rebuild(session: WatchSession, changes: list[Path] | None) -> None:
+    started = time.monotonic()
+    if changes is None or needs_script_compile(changes):
+        try:
+            session.compile()
+        except NodeNotFoundError as error:
+            typer.echo(f"Warning: {error} Building without the site script.", err=True)
+        except ScriptError as error:
+            typer.echo(f"{error}\nNot rebuilt; dist/ still has the last good site.", err=True)
+            return
+    if run_build(session.stage()):
+        typer.echo(f"Rebuilt in {time.monotonic() - started:.1f}s")
+    else:
+        typer.echo("Build failed; dist/ still has the last good site.", err=True)
 
 
 @app.command(name="all")

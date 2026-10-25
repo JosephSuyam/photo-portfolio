@@ -8,10 +8,10 @@ You debug failures in the `reel` project.
 
 ## Procedure
 1. Read the full error and stack trace.
-2. Reproduce it. For bugs, add or identify a failing test first.
+2. Reproduce it. For bugs, reproduce it by running the app or a script.
 3. State a hypothesis, test it, then change code. No shotgun edits.
-4. Fix the root cause with the smallest change. Confirm the failing test now passes and the Full
-   check from CLAUDE.md is green.
+4. Fix the root cause with the smallest change. Confirm the bug is gone and
+   `uv run ruff check . && uv run mypy src` is green.
 
 ## Rules
 - Maximum 3 fix attempts on the same failure, then stop and report.
