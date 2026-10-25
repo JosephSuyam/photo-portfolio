@@ -6,10 +6,12 @@ Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--
 
 - **sync** (`sync.py`, via `drive.py`): lists albums and photos, downloads only what changed
   (`md5Checksum`/`modifiedTime`), and removes cache entries deleted from Drive.
-- **build** (`build.py`, `images.py`, `scripts.py`): compiles `src/reel/ts/` (`site.ts`:
-  wheel scrolls the index sideways; `lightbox.ts`: album photo viewer) with the
-  project's local `tsc` into a temporary folder, makes content-hashed thumbnails and display images
-  (WebP + JPEG), then renders Jinja2 templates into `dist/`.
+- **build** (`build.py`, `images.py`, `scripts.py`): compiles `src/reel/ts/` with the
+  project's local `tsc` into a temporary folder, makes content-hashed thumbnails and display
+  images (WebP + JPEG), then renders Jinja2 templates into `dist/`. Scripts:
+  - `theme.ts`: light/dark toggle in the header
+  - `album-preview.ts`: index hover/focus preview in the feature card
+  - `lightbox.ts`: album photo viewer
 - **serve**: `dist/` is plain static files. `reel serve` previews them on localhost.
 
 ## Sync
@@ -31,10 +33,10 @@ Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--
 
 ```
 dist/
-  index.html, work/index.html   album index (horizontal strip of covers)
-  <slug>/index.html             album page: title, photo mosaic, lightbox, "Next" (wraps to the first album)
+  index.html, work/index.html   album index: "Work", feature card, grid of album cards
+  <slug>/index.html             album page: title, photo count, mosaic, lightbox, Previous/Next pager
   images/<hash>.webp|.jpg       thumbnails (600px wide) and display images (2000px long edge)
-  static/                       CSS and compiled JavaScript (site.js, lightbox.js)
+  static/                       site.css and compiled JavaScript (theme.js, album-preview.js, lightbox.js)
   .reel-build                   marker: this directory was written by `reel build`
 ```
 
@@ -51,6 +53,49 @@ Drive is never called at page-view time, and Drive links never appear in the out
 
 `drive.py` defines a `DriveClient` protocol. `GoogleDriveClient` is the real adapter; tests use
 an in-memory fake in `tests/fixtures/fake_drive.py`.
+
+## Every page
+
+- `base.html`: header (site title, "Work" link, theme toggle) and a centered footer (site
+  title, © build year). The header scrolls with the page.
+- **Theme**: light by default. Dark tokens apply when `<html data-theme="dark">` is set, or
+  when the OS prefers dark and `data-theme` isn't `"light"` (`site.css`). `theme.ts` unhides
+  the toggle. A click flips the current effective theme, sets `data-theme`, and stores it in
+  `localStorage["reel-theme"]`. A small inline script in `<head>` applies the stored theme
+  before first paint. The toggle and the inline script are rendered only when the build has
+  scripts. Without JavaScript the OS setting applies and the toggle stays hidden.
+- **Phones** (<= 767px): one column on every page.
+
+## Album index
+
+- "Work" heading and "N albums · M photographs" (singular for 1).
+- The first album, in manifest (Drive) order, gets a feature card labelled "Latest album":
+  a 16:9 cover, 66vw wide on desktop (4:5 with the text below on phones). With one album the
+  feature card is the only card. With none, there is no feature card and no grid.
+- The other albums go into a 12-column grid. `album_card_spans()` in `build.py` gives each
+  card a column span so that every row is full:
+
+  ```
+  full rows         4 cards, span 3 each
+  1 card in total   [12]
+  2 left            [6, 6]
+  3 left            [4, 4, 4]
+  1 left            the last 5 cards become [4, 4, 4] + [6, 6]
+  e.g. 6 cards      [3, 3, 3, 3, 6, 6]
+  ```
+
+  `site.css` gives every card frame the same height (a 4:5 frame in a row of four, via
+  container units); `card_aspect()` approximates each span's frame shape for `sizes`
+  (4:5 for span 3, 16:15 for 4, 8:5 for 6, 16:5 for 12). `cover_sizes()` gives the `sizes` value for the feature and the cards (the
+  mosaic uses it too). The `FEATURE_*`, `GRID_COLUMNS`, `CARDS_PER_ROW`, and
+  `LAST_ROW_SPANS` constants must stay in sync with `site.css`.
+- **Preview**: `album-preview.ts` shows a card's album in the feature card (cover, title,
+  count, link, and the cover's own feature `sizes` from `data-feature-sizes`) when a mouse
+  or pen hovers it or the keyboard focuses it, and hides "Latest album" while it does. Taps
+  on touch screens just open the album. When the pointer leaves the albums section (and
+  keyboard focus isn't inside it), or focus leaves it, the first album comes back, also
+  after Back restores the page. Moving from a card up to the feature card keeps the
+  preview, so the previewed album can be clicked.
 
 ## Album page
 
@@ -74,5 +119,8 @@ an in-memory fake in `tests/fixtures/fake_drive.py`.
   `<dialog>` viewer (prev/next buttons, arrow keys, swipe, Escape/close/backdrop to close,
   "n / total" counter). The dialog is rendered only when the build has scripts; without
   JavaScript the link opens the JPEG. All compiled scripts load on every page and do nothing
-  where their elements are missing.
-- **Header**: on album pages it scrolls away with the page instead of staying fixed.
+  where their elements are missing. The lightbox stays dark in both themes.
+- **Pager**: a serif title and photo count above the mosaic. Below it, "← Previous" and
+  "Next →" link to the neighboring albums and wrap around (`previous_album_index()`,
+  `next_album_index()`). With two albums both links go to the other album. With one album
+  there is no pager.

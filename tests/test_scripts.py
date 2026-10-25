@@ -20,15 +20,16 @@ def test_compile_scripts_without_node_raises_script_error(
 
 
 @needs_node
-def test_compile_scripts_writes_site_js(tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", ["theme.js", "album-preview.js", "lightbox.js"])
+def test_compile_scripts_writes_site_script(tmp_path: Path, name: str) -> None:
     compile_scripts(tmp_path)
-    assert (tmp_path / "site.js").is_file()
+    assert (tmp_path / name).is_file()
 
 
 @needs_node
 def test_compile_scripts_output_has_no_type_annotations(tmp_path: Path) -> None:
     compile_scripts(tmp_path)
-    assert "HTMLElement" not in (tmp_path / "site.js").read_text(encoding="utf-8")
+    assert "AlbumView" not in (tmp_path / "album-preview.js").read_text(encoding="utf-8")
 
 
 def test_compile_scripts_without_node_raises_node_not_found(

@@ -11,6 +11,7 @@ import re
 import shutil
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from datetime import date
 from fractions import Fraction
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
@@ -28,10 +29,16 @@ BUILD_MARKER = ".reel-build"
 IMAGES_DIR = "images"
 STATIC_DIR = Path(__file__).parent / "static"
 
-# Rendered cover heights on desktop and widths on phones; keep in sync with site.css.
-INDEX_COVER_HEIGHT_VH = 70
-INDEX_COVER_MOBILE_VW = 50
 MOBILE_MAX_WIDTH_PX = 767
+
+# Album index: the first album in a wide feature card, the rest in a 12-column grid of cards
+# that all share one height; keep in sync with site.css.
+FEATURE_WIDTH_VW = 66
+FEATURE_ASPECT = Fraction(16, 9)
+GRID_COLUMNS = 12
+CARDS_PER_ROW = 4
+# Span of each card in the last row(s) by the number of cards left after full rows.
+LAST_ROW_SPANS = {1: (4, 4, 4, 6, 6), 2: (6, 6), 3: (4, 4, 4)}
 
 # Album mosaic on a 4-column grid of square cells; keep in sync with site.css.
 # Each 4-photo group fills a 4x2 block, alternating sides so the big tile zigzags.
@@ -128,10 +135,42 @@ def srcset(candidates: Iterable[tuple[str, int]]) -> str:
     return ", ".join(f"{url} {width}w" for url, width in seen.items())
 
 
-def sizes(variant: ImageVariant, height_vh: int, mobile_width_vw: int) -> str:
-    """`sizes` value for an image `height_vh` tall on desktops, `mobile_width_vw` wide on phones."""
-    desktop_width_vh = math.ceil(height_vh * variant.width / variant.height)
-    return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) {mobile_width_vw}vw, {desktop_width_vh}vh"
+def cover_sizes(variant: ImageVariant, width_vw: int | Fraction, box_aspect: Fraction) -> str:
+    """`sizes` value for a photo cropped to fill a box `width_vw` wide; full width on phones.
+
+    `box_aspect` is the box's width / height. A photo wider than its box is cropped at the
+    sides, so it renders wider than the box.
+    """
+    # Fraction keeps exact multiples exact; floats can push them just past an integer.
+    overflow = max(Fraction(1), Fraction(variant.width, variant.height) / box_aspect)
+    return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) 100vw, {math.ceil(width_vw * overflow)}vw"
+
+
+def album_card_spans(count: int) -> list[int]:
+    """Grid column span of each of `count` album cards, so every row fills all 12 columns."""
+    if count < 0:
+        raise ValueError(f"Card count must not be negative, got {count}.")
+    if count == 1:
+        return [GRID_COLUMNS]
+    full_rows, left = divmod(count, CARDS_PER_ROW)
+    if left == 1:
+        # A lone last card would fill a whole row; regroup the last 5 cards as 3 + 2.
+        full_rows -= 1
+    full_span = GRID_COLUMNS // CARDS_PER_ROW
+    return [full_span] * (full_rows * CARDS_PER_ROW) + list(LAST_ROW_SPANS.get(left, ()))
+
+
+def card_aspect(span: int) -> Fraction:
+    """Width / height of a card spanning `span` columns, ignoring the gaps between columns.
+
+    site.css gives every card frame the same height; this ratio is close enough for `sizes`.
+    """
+    return Fraction(4, 5) * span / (GRID_COLUMNS // CARDS_PER_ROW)
+
+
+def photo_count(count: int) -> str:
+    """Photo count for display: "1 photo", "2 photos"."""
+    return f"{count} photo{'' if count == 1 else 's'}"
 
 
 def mosaic_shapes(count: int) -> list[str]:
@@ -151,10 +190,7 @@ def mosaic_sizes(variant: ImageVariant, shape: str) -> str:
         tile_width_vw, tile_aspect = MOSAIC_TILES[shape]
     except KeyError:
         raise ValueError(f"Unknown mosaic shape {shape!r}.") from None
-    # A photo wider than its tile is cropped at the sides, so it renders wider than the tile.
-    # Fraction keeps exact multiples exact; floats can push them just past an integer.
-    overflow = max(Fraction(1), Fraction(variant.width, variant.height * tile_aspect))
-    return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) 100vw, {math.ceil(tile_width_vw * overflow)}vw"
+    return cover_sizes(variant, tile_width_vw, Fraction(tile_aspect))
 
 
 def next_album_index(index: int, count: int) -> int | None:
@@ -162,6 +198,13 @@ def next_album_index(index: int, count: int) -> int | None:
     if count < 2:
         return None
     return (index + 1) % count
+
+
+def previous_album_index(index: int, count: int) -> int | None:
+    """Index of the album before `index`, wrapping to the last; None if there is only one."""
+    if count < 2:
+        return None
+    return (index - 1) % count
 
 
 def staging_dir_for(out_dir: Path) -> Path:
@@ -298,37 +341,77 @@ def _render_site(
     script_names: Sequence[str],
 ) -> None:
     environment = make_environment()
-    common = {"site_title": site_title, "base_path": base_path, "script_names": script_names}
+    common = {
+        "site_title": site_title,
+        "base_path": base_path,
+        "script_names": script_names,
+        "year": date.today().year,
+    }
 
     index_html = environment.get_template("index.html").render(
-        **common, albums=[_index_entry(album, base_path) for album in albums]
+        **common, **_index_context(albums, base_path)
     )
     _write_page(out_dir / "index.html", index_html)
     _write_page(out_dir / "work" / "index.html", index_html)
 
     album_template = environment.get_template("album.html")
     for index, album in enumerate(albums):
+        previous_index = previous_album_index(index, len(albums))
         next_index = next_album_index(index, len(albums))
-        next_album = albums[next_index] if next_index is not None else None
         html = album_template.render(
             **common,
             album=_album_context(album, base_path),
-            next_album={"title": next_album.title, "slug": next_album.slug} if next_album else None,
+            previous_album=_link(albums[previous_index]) if previous_index is not None else None,
+            next_album=_link(albums[next_index]) if next_index is not None else None,
         )
         _write_page(out_dir / album.slug / "index.html", html)
 
 
-def _index_entry(album: PublishedAlbum, base_path: str) -> dict[str, object]:
+def _link(album: PublishedAlbum) -> dict[str, str]:
+    return {"title": album.title, "slug": album.slug}
+
+
+def _index_context(albums: Sequence[PublishedAlbum], base_path: str) -> dict[str, object]:
+    photo_total = sum(len(album.photos) for album in albums)
+    feature = None
+    if albums:
+        first = albums[0]
+        feature = {
+            **_link(first),
+            "count": photo_count(len(first.photos)),
+            "cover": _cover_context(first, base_path, FEATURE_WIDTH_VW, FEATURE_ASPECT),
+        }
+    rest = albums[1:]
+    cards = [
+        {
+            **_link(album),
+            "count": photo_count(len(album.photos)),
+            "span": span,
+            "feature_sizes": cover_sizes(album.cover.display, FEATURE_WIDTH_VW, FEATURE_ASPECT),
+            "cover": _cover_context(
+                album, base_path, Fraction(100 * span, GRID_COLUMNS), card_aspect(span)
+            ),
+        }
+        for album, span in zip(rest, album_card_spans(len(rest)), strict=True)
+    ]
+    album_word = "album" if len(albums) == 1 else "albums"
+    photo_word = "photograph" if photo_total == 1 else "photographs"
     return {
-        "title": album.title,
-        "slug": album.slug,
-        "cover": _image_context(
-            album.cover,
-            base_path,
-            fallback=album.cover.thumbnail,
-            sizes_value=sizes(album.cover.display, INDEX_COVER_HEIGHT_VH, INDEX_COVER_MOBILE_VW),
-        ),
+        "summary": f"{len(albums)} {album_word} · {photo_total} {photo_word}",
+        "feature": feature,
+        "cards": cards,
     }
+
+
+def _cover_context(
+    album: PublishedAlbum, base_path: str, width_vw: int | Fraction, box_aspect: Fraction
+) -> dict[str, object]:
+    return _image_context(
+        album.cover,
+        base_path,
+        fallback=album.cover.thumbnail,
+        sizes_value=cover_sizes(album.cover.display, width_vw, box_aspect),
+    )
 
 
 def _album_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
@@ -345,7 +428,7 @@ def _album_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
         }
         for photo, shape in zip(album.photos, mosaic_shapes(len(album.photos)), strict=True)
     ]
-    return {"title": album.title, "photos": photos}
+    return {"title": album.title, "count": photo_count(len(album.photos)), "photos": photos}
 
 
 def _image_context(
