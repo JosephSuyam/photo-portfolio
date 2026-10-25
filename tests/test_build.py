@@ -1,6 +1,5 @@
 import json
 import logging
-import math
 import re
 from datetime import UTC, date, datetime
 from fractions import Fraction
@@ -171,6 +170,40 @@ def test_build_site_copies_stylesheet(cache: Path, out: Path) -> None:
 
     _build(_three_albums(cache), cache, out)
     assert (out / "static" / "site.css").read_bytes() == (STATIC_DIR / "site.css").read_bytes()
+
+
+@pytest.mark.parametrize("name", ["bodoni-moda-latin.woff2", "OFL.txt"])
+def test_build_site_copies_font_file(cache: Path, out: Path, name: str) -> None:
+    from reel.build import STATIC_DIR
+
+    _build(_three_albums(cache), cache, out)
+    copied = out / "static" / "fonts" / name
+    assert copied.read_bytes() == (STATIC_DIR / "fonts" / name).read_bytes()
+
+
+def _font_faces(out: Path) -> list[str]:
+    css = _read(out / "static" / "site.css")
+    return re.findall(r"@font-face\s*\{[^}]*\}", css)
+
+
+def test_build_site_stylesheet_declares_bodoni_moda_font_face(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    families = [re.search(r"font-family:\s*([^;]+);", face) for face in _font_faces(out)]
+    assert '"Bodoni Moda"' in [match.group(1).strip() for match in families if match]
+
+
+def test_build_site_bodoni_moda_font_url_relative_to_stylesheet(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    bodoni = [face for face in _font_faces(out) if "Bodoni Moda" in face]
+    # A relative URL resolves against site.css, so it keeps working under a base path.
+    urls = [url for face in bodoni for url in re.findall(r'url\("([^"]+)"\)', face)]
+    assert urls == ["fonts/bodoni-moda-latin.woff2"]
+
+
+def test_build_site_bodoni_moda_font_url_points_at_copied_file(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    urls = re.findall(r'url\("([^"]+\.woff2)"\)', "".join(_font_faces(out)))
+    assert [(out / "static" / url).is_file() for url in urls] == [True]
 
 
 def test_build_site_writes_derived_images(cache: Path, out: Path, tmp_path: Path) -> None:
@@ -682,134 +715,64 @@ def test_base_path_from_url_already_encoded_path_not_double_encoded() -> None:
     assert base_path_from_url("https://x.com/my%20portfolio/") == "/my%20portfolio/"
 
 
-# mosaic_shapes
-
-_SHAPE_SPANS = {"small": (1, 1), "wide": (2, 1), "big": (2, 2), "full": (4, 2)}
-_GRID_COLUMNS = 4
+# justified_sizes
 
 
-def _auto_place(shapes: list[str]) -> list[set[tuple[int, int]]]:
-    """Cells (row, column) each shape occupies under CSS grid sparse auto-placement."""
-    occupied: set[tuple[int, int]] = set()
-    placements: list[set[tuple[int, int]]] = []
-    row, column = 0, 0
-    for shape in shapes:
-        col_span, row_span = _SHAPE_SPANS[shape]
-        while True:
-            cells = {(row + r, column + c) for r in range(row_span) for c in range(col_span)}
-            if column + col_span <= _GRID_COLUMNS and not cells & occupied:
-                break
-            column += 1
-            if column + col_span > _GRID_COLUMNS:
-                row, column = row + 1, 0
-        occupied |= cells
-        placements.append(cells)
-        column += col_span
-    return placements
+def test_row_height_vw_is_twenty_eight() -> None:
+    from reel.build import ROW_HEIGHT_VW
+
+    assert ROW_HEIGHT_VW == 28
+
+
+def test_row_height_vw_matches_tile_basis_in_stylesheet() -> None:
+    from reel.build import ROW_HEIGHT_VW, STATIC_DIR
+
+    css = (STATIC_DIR / "site.css").read_text(encoding="utf-8")
+    basis = re.search(
+        r"flex:\s*calc\(var\(--ratio\) \* 1000\) 1 calc\(var\(--ratio\) \* ([^)]+)\)", css
+    )
+    assert basis is not None, "no justified tile flex rule in site.css"
+    value = basis.group(1).strip()
+    if variable := re.fullmatch(r"var\((--[\w-]+)\)", value):
+        declared = re.search(rf"{variable.group(1)}:\s*([^;]+);", css)
+        value = declared.group(1).strip() if declared else value
+    assert value == f"{ROW_HEIGHT_VW}vw"
 
 
 @pytest.mark.parametrize(
-    ("count", "expected"),
+    ("width", "height", "desktop"),
     [
-        (0, []),
-        (1, ["full"]),
-        (2, ["big", "big"]),
-        (3, ["big", "wide", "wide"]),
-        (4, ["big", "small", "small", "wide"]),
-        (5, ["big", "small", "small", "wide", "full"]),
-        (7, ["big", "small", "small", "wide", "wide", "big", "wide"]),
-        (8, ["big", "small", "small", "wide", "wide", "big", "small", "small"]),
+        (3000, 2000, "84vw"),
+        (1000, 1000, "56vw"),
+        (2000, 864, "100vw"),
+        (1080, 1929, "32vw"),
     ],
 )
-def test_mosaic_shapes_count_returns_expected_shapes(count: int, expected: list[str]) -> None:
-    from reel.build import mosaic_shapes
-
-    assert mosaic_shapes(count) == expected
-
-
-def test_mosaic_shapes_remainder_three_after_odd_groups_puts_big_in_middle() -> None:
-    from reel.build import mosaic_shapes
-
-    assert mosaic_shapes(15)[12:] == ["wide", "big", "wide"]
-
-
-def test_mosaic_shapes_remainder_three_after_even_groups_puts_big_first() -> None:
-    from reel.build import mosaic_shapes
-
-    assert mosaic_shapes(19)[16:] == ["big", "wide", "wide"]
-
-
-@pytest.mark.parametrize("count", range(21))
-def test_mosaic_shapes_tile_four_column_grid_without_holes(count: int) -> None:
-    from reel.build import mosaic_shapes
-
-    cells = set().union(*_auto_place(mosaic_shapes(count)))
-    rows = 2 * math.ceil(count / 4)
-    assert cells == {(r, c) for r in range(rows) for c in range(_GRID_COLUMNS)}
-
-
-@pytest.mark.parametrize("count", range(1, 21))
-def test_mosaic_shapes_each_group_of_four_fills_its_own_block(count: int) -> None:
-    from reel.build import mosaic_shapes
-
-    placements = _auto_place(mosaic_shapes(count))
-    outside = [
-        index
-        for index, cells in enumerate(placements)
-        if {row // 2 for row, _ in cells} != {index // 4}
-    ]
-    assert outside == []
-
-
-def test_mosaic_shapes_negative_count_raises_value_error() -> None:
-    from reel.build import mosaic_shapes
-
-    with pytest.raises(ValueError):
-        mosaic_shapes(-1)
-
-
-# mosaic_sizes
-
-
-@pytest.mark.parametrize(
-    ("width", "height", "shape", "desktop"),
-    [
-        (1500, 1000, "small", "38vw"),
-        (1000, 2000, "small", "25vw"),
-        (3000, 1000, "wide", "75vw"),
-        (1000, 1000, "full", "100vw"),
-        (2000, 1000, "big", "100vw"),
-        (1000, 2000, "big", "50vw"),
-        (1000, 1000, "wide", "50vw"),
-        (3000, 1000, "full", "150vw"),
-    ],
-)
-def test_mosaic_sizes_returns_cover_crop_width(
-    width: int, height: int, shape: str, desktop: str
+def test_justified_sizes_returns_twice_row_height_width(
+    width: int, height: int, desktop: str
 ) -> None:
-    from reel.build import mosaic_sizes
+    from reel.build import justified_sizes
     from reel.images import ImageVariant
 
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=width, height=height)
-    assert mosaic_sizes(variant, shape) == f"(max-width: 767px) 100vw, {desktop}"
+    assert justified_sizes(variant) == f"(max-width: 767px) 100vw, {desktop}"
 
 
-def test_mosaic_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
-    from reel.build import mosaic_sizes
+def test_justified_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
+    from reel.build import justified_sizes
     from reel.images import ImageVariant
 
-    # 25 * 1120 / 1000 is exactly 28, but 25 * (1120 / 1000) is 28.000000000000004 in floats.
-    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=1120, height=1000)
-    assert mosaic_sizes(variant, "small") == "(max-width: 767px) 100vw, 28vw"
+    # 56 * 116 / 112 is exactly 58, but (116 / 112) * 28 * 2 is 58.00000000000001 in floats.
+    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=116, height=112)
+    assert justified_sizes(variant) == "(max-width: 767px) 100vw, 58vw"
 
 
-def test_mosaic_sizes_unknown_shape_raises_value_error() -> None:
-    from reel.build import mosaic_sizes
+def test_justified_sizes_very_wide_photo_capped_at_viewport_width() -> None:
+    from reel.build import justified_sizes
     from reel.images import ImageVariant
 
-    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=1000, height=1000)
-    with pytest.raises(ValueError):
-        mosaic_sizes(variant, "huge")
+    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=6000, height=1000)
+    assert justified_sizes(variant) == "(max-width: 767px) 100vw, 100vw"
 
 
 # build_site: album mosaic and lightbox
@@ -823,18 +786,34 @@ def _album_of(cache: Path, count: int) -> Album:
     return make_album("a", photos, title="Book One")
 
 
-def _tile_shapes(html: str) -> list[str]:
-    return re.findall(r'class="tile tile--(\w+)"', html)
+def _tiles(out: Path) -> list[Element]:
+    return _page(out / "a" / "index.html").find_all("ul.mosaic li.tile")
 
 
-def test_build_site_single_photo_album_has_full_tile(cache: Path, out: Path) -> None:
-    _build([_album_of(cache, 1)], cache, out)
-    assert _tile_shapes(_read(out / "a" / "index.html")) == ["full"]
+def test_build_site_album_tile_style_carries_photo_ratio(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1200, 800))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    assert [tile.attrs.get("style") for tile in _tiles(out)] == ["--ratio: 1.5000"]
 
 
-def test_build_site_four_photo_album_tiles_have_group_shapes(cache: Path, out: Path) -> None:
-    _build([_album_of(cache, 4)], cache, out)
-    assert _tile_shapes(_read(out / "a" / "index.html")) == ["big", "small", "small", "wide"]
+def test_build_site_album_tile_ratio_rounded_to_four_decimals(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1000, 700))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    assert [tile.attrs.get("style") for tile in _tiles(out)] == ["--ratio: 1.4286"]
+
+
+def test_build_site_album_tiles_keep_photo_order_ratios(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(800, 1200), color=(255, 0, 0))
+    write_original(cache, "p2", size=(900, 900), color=(0, 255, 0))
+    write_original(cache, "p3", size=(1600, 400), color=(0, 0, 255))
+    _build([make_album("a", [make_photo(f"p{n}") for n in (1, 2, 3)])], cache, out)
+    styles = [tile.attrs.get("style") for tile in _tiles(out)]
+    assert styles == ["--ratio: 0.6667", "--ratio: 1.0000", "--ratio: 4.0000"]
+
+
+def test_build_site_album_tiles_have_no_shape_class(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 5)], cache, out)
+    assert [tile.classes for tile in _tiles(out)] == [["tile"]] * 5
 
 
 def test_build_site_album_tile_links_display_jpeg_with_base_path(
@@ -864,11 +843,19 @@ def test_build_site_album_tile_last_link_label_counts_all_photos(cache: Path, ou
     assert 'aria-label="Open photo 3 of 3"' in _read(out / "a" / "index.html")
 
 
-def test_build_site_album_tile_sizes_follow_shape(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", size=(1200, 400))
+def test_build_site_album_tile_sizes_from_justified_row(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1200, 800))
     _build([make_album("a", [make_photo("p1")])], cache, out)
-    # A 3:1 photo in a 2:1 full tile is cropped to 1.5x the 100vw tile width.
-    assert 'sizes="(max-width: 767px) 100vw, 150vw"' in _read(out / "a" / "index.html")
+    image = _one(_tiles(out)[0], "img")
+    # A 3:2 photo at twice the 28vw row height is 3/2 * 56 = 84vw wide.
+    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 84vw"
+
+
+def test_build_site_album_tile_source_sizes_match_image(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1200, 800))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    (tile,) = _tiles(out)
+    assert _one(tile, "source").attrs.get("sizes") == _one(tile, "img").attrs.get("sizes")
 
 
 def test_build_site_album_page_has_visible_heading(cache: Path, out: Path) -> None:
@@ -920,7 +907,7 @@ def test_build_site_without_scripts_album_page_has_no_lightbox(cache: Path, out:
 
 # album_card_spans
 
-_CARD_SPANS = {3, 4, 6, 12}
+_CARD_SPANS = {6, 12}
 _CARD_COLUMNS = 12
 
 
@@ -940,12 +927,10 @@ def _rows(spans: list[int]) -> list[list[int]]:
         (0, []),
         (1, [12]),
         (2, [6, 6]),
-        (3, [4, 4, 4]),
-        (4, [3, 3, 3, 3]),
-        (5, [4, 4, 4, 6, 6]),
-        (6, [3, 3, 3, 3, 6, 6]),
-        (7, [3, 3, 3, 3, 4, 4, 4]),
-        (9, [3, 3, 3, 3, 4, 4, 4, 6, 6]),
+        (3, [6, 6, 12]),
+        (4, [6, 6, 6, 6]),
+        (5, [6, 6, 6, 6, 12]),
+        (6, [6, 6, 6, 6, 6, 6]),
     ],
 )
 def test_album_card_spans_count_returns_expected_spans(count: int, expected: list[int]) -> None:
@@ -976,11 +961,45 @@ def test_album_card_spans_uses_only_allowed_spans(count: int) -> None:
     assert set(album_card_spans(count)) <= _CARD_SPANS
 
 
+@pytest.mark.parametrize("count", range(21))
+def test_album_card_spans_only_last_card_may_span_full_row(count: int) -> None:
+    from reel.build import album_card_spans
+
+    assert _CARD_COLUMNS not in album_card_spans(count)[:-1]
+
+
 def test_album_card_spans_negative_count_raises_value_error() -> None:
     from reel.build import album_card_spans
 
     with pytest.raises(ValueError):
         album_card_spans(-1)
+
+
+# index layout constants and card_aspect
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("FEATURE_WIDTH_VW", 100), ("FEATURE_ASPECT", Fraction(21, 9)), ("CARDS_PER_ROW", 2)],
+)
+def test_index_layout_constant_matches_design(name: str, expected: object) -> None:
+    import reel.build
+
+    assert getattr(reel.build, name) == expected
+
+
+@pytest.mark.parametrize(("span", "expected"), [(6, Fraction(3, 2)), (12, Fraction(3, 1))])
+def test_card_aspect_span_returns_frame_ratio(span: int, expected: Fraction) -> None:
+    from reel.build import card_aspect
+
+    assert card_aspect(span) == expected
+
+
+def test_card_aspect_full_row_frame_as_tall_as_half_row_frame() -> None:
+    from reel.build import card_aspect
+
+    # Frame height is proportional to span / aspect; both spans must give the same height.
+    assert Fraction(12) / card_aspect(12) == Fraction(6) / card_aspect(6)
 
 
 # cover_sizes
@@ -1013,20 +1032,6 @@ def test_cover_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
 
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=1120, height=1000)
     assert cover_sizes(variant, 25, Fraction(1)) == "(max-width: 767px) 100vw, 28vw"
-
-
-@pytest.mark.parametrize(
-    ("shape", "width_vw", "aspect"),
-    [("small", 25, 1), ("wide", 50, 2), ("big", 50, 1), ("full", 100, 2)],
-)
-def test_mosaic_sizes_matches_cover_sizes_for_tile_box(
-    shape: str, width_vw: int, aspect: int
-) -> None:
-    from reel.build import cover_sizes, mosaic_sizes
-    from reel.images import ImageVariant
-
-    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=3000, height=1000)
-    assert mosaic_sizes(variant, shape) == cover_sizes(variant, width_vw, Fraction(aspect))
 
 
 # build_site: index heading and counts
@@ -1129,8 +1134,15 @@ def test_build_site_index_feature_sizes_from_wide_box(cache: Path, out: Path) ->
     write_original(cache, "p1", size=(1200, 400))
     _build([make_album("a", [make_photo("p1")])], cache, out)
     image = _one(_page(out / "index.html"), "a.feature img")
-    # A 3:1 cover in a 66vw-wide 16:9 frame is cropped to 66 * 27/16 = 111.4vw.
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 112vw"
+    # A 3:1 cover in a 100vw-wide 21:9 frame is cropped to 100 * 9/7 = 128.6vw.
+    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 129vw"
+
+
+def test_build_site_index_feature_narrower_cover_not_cropped_wider(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1200, 800))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    image = _one(_page(out / "index.html"), "a.feature img")
+    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 100vw"
 
 
 def test_build_site_single_album_index_has_feature(cache: Path, out: Path) -> None:
@@ -1195,7 +1207,7 @@ def _card_spans(out: Path) -> list[int]:
 
 @pytest.mark.parametrize(
     ("album_count", "expected"),
-    [(2, [12]), (3, [6, 6]), (5, [3, 3, 3, 3]), (6, [4, 4, 4, 6, 6])],
+    [(2, [12]), (3, [6, 6]), (4, [6, 6, 12]), (6, [6, 6, 6, 6, 12])],
 )
 def test_build_site_index_grid_cards_have_span_classes(
     cache: Path, out: Path, album_count: int, expected: list[int]
@@ -1211,19 +1223,31 @@ def test_build_site_index_card_sizes_from_span_box(cache: Path, out: Path) -> No
     albums = [make_album(slug, [make_photo(f"{slug}-p1")]) for slug in ("a", "b", "c")]
     _build(albums, cache, out)
     image = _one(_cards(out)[0], "img")
-    # Span 6 is a 50vw frame of aspect 8/5; a 3:1 cover is cropped to 50 * 15/8 = 93.75vw.
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 94vw"
+    # Span 6 is a 50vw frame of aspect 3/2; a 3:1 cover is cropped to 50 * 2 = 100vw.
+    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 100vw"
 
 
-def test_build_site_index_card_sizes_round_fractional_box_up(cache: Path, out: Path) -> None:
-    albums = []
-    for index, slug in enumerate("abcd"):
-        write_original(cache, f"{slug}-p1", color=(index * 60, 0, 0), size=(30, 30))
-        albums.append(make_album(slug, [make_photo(f"{slug}-p1")]))
+def test_build_site_index_card_sizes_round_fractional_width_up(cache: Path, out: Path) -> None:
+    write_original(cache, "a-p1")
+    write_original(cache, "b-p1", size=(160, 90))
+    write_original(cache, "c-p1", color=(0, 0, 255))
+    albums = [make_album(slug, [make_photo(f"{slug}-p1")]) for slug in ("a", "b", "c")]
     _build(albums, cache, out)
     image = _one(_cards(out)[0], "img")
-    # Span 4 is a 33.3vw frame of aspect 16/15; a square cover is not cropped wider than it.
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 34vw"
+    # A 16:9 cover in a 50vw 3:2 frame is cropped to 50 * 32/27 = 59.3vw.
+    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 60vw"
+
+
+def test_build_site_index_lone_last_card_sizes_from_full_row_box(cache: Path, out: Path) -> None:
+    albums = []
+    for index, slug in enumerate("abcd"):
+        size = (800, 200) if slug == "d" else (40, 30)
+        write_original(cache, f"{slug}-p1", color=(index * 60, 0, 0), size=size)
+        albums.append(make_album(slug, [make_photo(f"{slug}-p1")]))
+    _build(albums, cache, out)
+    image = _one(_cards(out)[-1], "img")
+    # The lone last card is a 100vw 3:1 frame; a 4:1 cover is cropped to 100 * 4/3 = 133.3vw.
+    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 134vw"
 
 
 _SIZES_PATTERN = re.compile(r"\(max-width: 767px\) 100vw, \d+vw")
@@ -1242,8 +1266,8 @@ def test_build_site_index_card_feature_sizes_follow_cover_aspect(cache: Path, ou
     albums = [make_album(slug, [make_photo(f"{slug}-p1")]) for slug in ("a", "b", "c")]
     _build(albums, cache, out)
     values = [_one(card, "a").attrs.get("data-feature-sizes") for card in _cards(out)]
-    # In the 66vw 16:9 feature frame a 3:1 cover is cropped to 112vw; a 3:2 cover fits at 66vw.
-    assert values == ["(max-width: 767px) 100vw, 112vw", "(max-width: 767px) 100vw, 66vw"]
+    # In the 100vw 21:9 feature frame a 3:1 cover is cropped to 129vw; a 3:2 cover fits at 100vw.
+    assert values == ["(max-width: 767px) 100vw, 129vw", "(max-width: 767px) 100vw, 100vw"]
 
 
 # build_site: header and footer

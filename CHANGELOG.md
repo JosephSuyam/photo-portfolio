@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- "Reel" redesign: a white page (black in dark mode) with Bodoni display headlines over
+  Helvetica text. Every page opens with the site title centered over a spaced uppercase menu,
+  with the theme toggle at the top right. The 1.5 s theme cross-fade is unchanged.
+- Album index: "Work" and the counts centered, then the first album as a full-bleed 21:9
+  feature (4:5 on phones) with its label, title, and count in white over the photo. The
+  other albums follow edge to edge, two per row in 3:2 frames; a lone last card spans the
+  row at 3:1, the same height. Titles and counts sit on the photos, and hovering a card
+  zooms it slightly (not with reduced motion). Hovering or focusing a card still previews
+  it in the feature.
+- Album pages: justified rows replace the mosaic. Every photo is shown whole at its own
+  aspect ratio, rows share one height, and the last row isn't stretched. Phones get one
+  column.
+- About and Contact are centered columns. The Contact form still appears only when
+  `CONTACT_FORM_URL` is set.
+- Bodoni Moda is self-hosted under `static/fonts/` (SIL Open Font License 1.1, `OFL.txt`)
+  and loads with `font-display: swap` and a relative URL, so it works under a base path.
+  No font CDN is called when a page is viewed.
 - About and Contact pages (`/about/`, `/contact/`) from optional `about.json` and
   `contact.json` files in the Drive root (samples in `docs/examples/`). About: a large
   `lede`, then `paragraphs`. Contact: the `email` shown large, then `details` as labelled
@@ -11,28 +28,26 @@
   `contact-2`.
 - Optional `CONTACT_FORM_URL` (https only) adds a "Send a message" form that posts to a form
   service such as Formspree. Unset, the Contact page shows links only.
-- Header nav: "Work", then "About" and "Contact" when those pages exist. On phones the nav
-  wraps below the site title instead of the title breaking. The footer stays at the bottom
-  of short pages.
+- Header nav: "Work", then "About" and "Contact" when those pages exist. The footer stays
+  at the bottom of short pages.
 - Clicking the theme toggle cross-fades the colours over 1.5 s. Page loads and OS theme
   changes still switch instantly, and so does the toggle when reduced motion is set.
-- "Editorial Light" redesign of the whole site: a light page with serif headlines. Dark mode
-  follows the OS setting, or a header toggle that is remembered in this browser and applied
-  before the page paints. Without JavaScript the OS setting applies and the toggle is hidden.
-  Every page has the same header (site title, "Work", theme toggle) and a centered footer
-  (site title, © build year). The header scrolls with the page.
+- Light and dark themes: dark mode follows the OS setting, or a header toggle that is
+  remembered in this browser and applied before the page paints. Without JavaScript the OS
+  setting applies and the toggle is hidden. Every page has the same header (site title,
+  "Work", theme toggle) and a centered footer (site title, © build year). The header
+  scrolls with the page.
 - Album index (`/`, `/work/`): a "Work" heading with "N albums · M photographs". The first
-  album in Drive order gets a wide feature card labelled "Latest album". The rest fill a grid
-  of equal-height cards (cover, title, photo count) in rows of 4, and the last rows stretch
-  so there are no gaps. Hovering a card (mouse or pen) or reaching it with the keyboard previews that album in the feature card.
-  Replaces the horizontal strip and sideways wheel scrolling.
-- Album pages: serif title and photo count, then the mosaic. "Next" is replaced by a
+  album in Drive order is featured, labelled "Latest album", and the rest follow as cover
+  cards with title and photo count. Hovering a card (mouse or pen) or reaching it with the
+  keyboard previews that album in the feature. Replaces the horizontal strip and sideways
+  wheel scrolling.
+- Album pages: title and photo count, then the photos. "Next" is replaced by a
   Previous/Next pager, and both links wrap around.
 - Phones: one column on every page.
-- Album pages scroll vertically, with a 4-column mosaic of cropped tiles (hover zoom, fade-in
-  unless reduced motion is set). Clicking a photo opens a lightbox with previous/next
-  buttons, arrow keys, swipe, and an "n / total" counter. Without JavaScript the photo links
-  to its display JPEG. Phones get one column of uncropped photos.
+- Album pages scroll vertically (photos fade in and zoom on hover unless reduced motion is
+  set). Clicking a photo opens a lightbox with previous/next buttons, arrow keys, swipe, and
+  an "n / total" counter. Without JavaScript the photo links to its display JPEG.
 - `reel sync`: incremental, read-only sync of albums and photos from Google Drive.
 - Site script is now TypeScript, compiled by `reel build`; Playwright browser tests in `e2e/`.
 - `reel serve` accepts many parallel image requests (the default backlog of 5 refused some).

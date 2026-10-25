@@ -1,40 +1,51 @@
-/* Editorial Light: a light page (or dark, by OS setting or the header toggle) with serif
-   headlines. The album index features the first album above a grid of cards; album pages
-   are a mosaic of cropped tiles with a lightbox; About and Contact are a quiet text column. */
+/* Reel: a white page (black in dark mode, by OS setting or the header toggle) with Bodoni
+   display headlines over Helvetica text. A centred title and spaced uppercase menu head every
+   page. The album index opens with a full-bleed feature of the first album above an
+   edge-to-edge grid of cover cards, titles set on the photos; album pages are justified rows
+   of uncropped photos with a lightbox; About and Contact are a centred text column. */
+
+@font-face {
+  font-family: "Bodoni Moda";
+  src: url("fonts/bodoni-moda-latin.woff2") format("woff2");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
-  --bg: #f7f6f3;
-  --fg: #141414;
-  --muted: #6e6e6e;
-  --line: #e2e0db;
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #8a8a8a;
+  --line: #e6e6e6;
   --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --serif: Georgia, "Times New Roman", serif;
-  --page-gutter: 56px;
-  /* Keep in sync with the MOSAIC_*, GRID_* and FEATURE_* constants in build.py. */
-  --mosaic-columns: 4;
-  --mosaic-gap: 8px;
+  --display: "Bodoni Moda", "Bodoni MT", Didot, Georgia, serif;
+  --page-gutter: 24px;
+  --overlay: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.25) 60%, rgba(0, 0, 0, 0));
+  --overlay-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
+  /* Keep in sync with the FEATURE_*, GRID_* and CARD_* constants in build.py; the 28vw tile
+     basis in .tile matches ROW_HEIGHT_VW. */
   --grid-columns: 12;
-  --feature-width: 66vw;
-  --card-gap: 20px;
+  --card-gap: 4px;
+  --tile-gap: 8px;
   color-scheme: light;
 }
 
 /* Dark tokens twice: for the OS setting (unless the toggle chose light) and for the toggle. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f0f0f;
-    --fg: #f1f1f1;
-    --muted: #9a9a9a;
-    --line: #262626;
+    --bg: #000000;
+    --fg: #f2f2f2;
+    --muted: #8f8f8f;
+    --line: #222222;
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0f0f0f;
-  --fg: #f1f1f1;
-  --muted: #9a9a9a;
-  --line: #262626;
+  --bg: #000000;
+  --fg: #f2f2f2;
+  --muted: #8f8f8f;
+  --line: #222222;
   color-scheme: dark;
 }
 
@@ -42,10 +53,10 @@
    .theme-transition (theme.ts) and the tokens cross-fade on the root; everything that uses
    them follows, with no per-element transitions. Loads and OS changes switch instantly.
    Keep the duration in sync with THEME_TRANSITION_MS in theme.ts. */
-@property --bg { syntax: "<color>"; inherits: true; initial-value: #f7f6f3; }
-@property --fg { syntax: "<color>"; inherits: true; initial-value: #141414; }
-@property --muted { syntax: "<color>"; inherits: true; initial-value: #6e6e6e; }
-@property --line { syntax: "<color>"; inherits: true; initial-value: #e2e0db; }
+@property --bg { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+@property --fg { syntax: "<color>"; inherits: true; initial-value: #1a1a1a; }
+@property --muted { syntax: "<color>"; inherits: true; initial-value: #8a8a8a; }
+@property --line { syntax: "<color>"; inherits: true; initial-value: #e6e6e6; }
 
 :root.theme-transition {
   transition: --bg 1.5s ease, --fg 1.5s ease, --muted 1.5s ease, --line 1.5s ease;
@@ -63,8 +74,8 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -78,48 +89,66 @@ img { display: block; }
 a:focus-visible,
 button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 
-/* Header and footer. */
-
-.site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 24px;
-  row-gap: 14px;
-  padding: 36px var(--page-gutter) 0;
-}
-
-/* Flex lines break at each item's one-line width, so on narrow screens the nav wraps below
-   the title; a title too long for the screen still wraps on its own row. */
-.site-title {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
+/* Small spaced capitals: menu, footer, counts, labels. */
+.site-nav a,
+.site-footer,
+.page-meta,
+.album-heading + .album-count,
+.feature-label,
+.feature-count,
+.album-card .album-count,
+.album-pager small,
+.label {
+  font-size: 11px;
+  letter-spacing: 0.26em;
   text-transform: uppercase;
 }
 
-.site-nav { display: flex; align-items: center; gap: 20px; }
+/* Header and footer. */
 
-.site-nav a {
-  font-size: 15px;
-  padding-bottom: 3px;
-  border-bottom: 1px solid transparent;
+/* The side padding keeps a long title clear of the toggle in the top right corner. */
+.site-header {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 72px 36px;
+  text-align: center;
 }
 
-.site-nav a:hover,
-.site-nav a[aria-current="page"] { border-color: currentColor; }
+/* Wraps only when the title is too long for the screen, never overflowing it. */
+.site-title {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  font: 700 40px/1.2 var(--display);
+}
 
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 36px;
+}
+
+.site-nav a { color: var(--muted); }
+
+.site-nav a:hover,
+.site-nav a[aria-current="page"] { color: var(--fg); }
+
+/* Positioned against the header, level with the first line of the title. */
 .theme-toggle {
+  position: absolute;
+  top: 46px;
+  right: 24px;
   display: grid;
   place-items: center;
   width: 36px;
   height: 36px;
   padding: 0;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 50%;
   background: none;
   color: var(--fg);
@@ -128,7 +157,7 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 
 .theme-toggle[hidden] { display: none; }
 
-.theme-toggle:hover { border-color: var(--fg); }
+.theme-toggle:hover { opacity: 0.7; }
 
 /* The icon shows the theme a click switches to. */
 .theme-toggle .icon-sun { display: none; }
@@ -142,146 +171,166 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
 .site-footer {
-  padding: 72px var(--page-gutter) 56px;
+  padding: 72px var(--page-gutter) 40px;
   text-align: center;
   color: var(--muted);
-  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
-.site-footer p { margin: 0; }
-
-.footer-title {
-  color: var(--fg);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
+.site-footer p { margin: 6px 0; }
 
 /* Page headings. */
 
 .page-heading,
 .album-heading {
   margin: 0;
-  padding: 64px var(--page-gutter) 8px;
-  font: 400 72px/1 var(--serif);
-  letter-spacing: -0.01em;
+  padding: 24px var(--page-gutter) 0;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
+
+.page-heading { font: 400 clamp(30px, 3vw, 44px)/1.15 var(--display); }
+
+.album-heading { font: 400 clamp(32px, 4vw, 56px)/1.1 var(--display); }
 
 .page-meta,
 .album-heading + .album-count {
   margin: 0;
-  padding: 0 var(--page-gutter) 40px;
+  padding: 10px var(--page-gutter) 40px;
+  text-align: center;
   color: var(--muted);
-  font-size: 14px;
 }
 
-/* Album index: feature card for the first album, then a 12-column grid of equal-height cards. */
+.album-heading + .album-count { padding-bottom: 48px; }
+
+/* Album index: full-bleed feature of the first album, then an edge-to-edge grid of cards. */
 
 /* The section is the container for the card height below. */
-.albums { padding: 0 var(--page-gutter); container-type: inline-size; }
+.albums { container-type: inline-size; }
 
 .feature {
-  display: grid;
-  /* About --feature-width of the page; minmax(0, ...) lets long titles wrap, never overflow. */
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 32px;
-  align-items: end;
-  margin-bottom: 40px;
+  position: relative;
+  display: block;
+  color: #fff;
 }
 
 .feature-frame,
 .album-frame { overflow: hidden; }
 
-.feature-frame { aspect-ratio: 16 / 9; }
+.feature-frame { aspect-ratio: 21 / 9; }
 
 .feature-frame img,
 .album-frame img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 600ms ease;
+  transition: transform 0.6s ease;
 }
 
 .feature picture,
 .album-frame picture { display: block; height: 100%; }
 
-.feature-label {
-  display: block;
-  margin-bottom: 12px;
-  color: var(--muted);
-  font-size: 12px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+.feature-text {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 120px 40px 40px;
+  background: var(--overlay);
+  text-shadow: var(--overlay-shadow);
 }
+
+.feature-label { display: block; }
 
 .feature-label[hidden] { visibility: hidden; display: block; }
 
 .feature-title {
-  margin: 0 0 6px;
-  font: 400 44px/1.15 var(--serif);
+  margin: 6px 0 4px;
+  font: 700 clamp(36px, 5vw, 72px)/1.05 var(--display);
   overflow-wrap: anywhere;
 }
 
-.feature-count,
-.album-card .album-count {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-}
+.feature-count { margin: 0; }
 
 .album-grid {
   display: grid;
   grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
-  gap: 40px var(--card-gap);
-  margin: 0;
+  gap: var(--card-gap);
+  margin: var(--card-gap) 0 0;
   padding: 0;
   list-style: none;
 }
 
-.album-card a { display: block; }
+.album-card { position: relative; }
 
-/* Frames widen with their span but share one height: a 4:5 frame in a row of four. */
-.album-frame { height: calc((100cqi - 3 * var(--card-gap)) / 4 * 5 / 4); }
-.album-card--span-3 { grid-column: span 3; }
-.album-card--span-4 { grid-column: span 4; }
-.album-card--span-6 { grid-column: span 6; }
-.album-card--span-12 { grid-column: span 12; }
+/* The frame fills the card; the title and count sit in its bottom rows, over a gradient
+   (::after) that reaches a little above them. */
+.album-card a {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  color: #fff;
+  text-shadow: var(--overlay-shadow);
+}
+
+.album-card a::after {
+  content: "";
+  grid-row: 2 / 4;
+  grid-column: 1;
+  margin-top: -80px;
+  background: var(--overlay);
+}
+
+.album-frame { grid-row: 1 / 4; grid-column: 1; }
+
+.album-title,
+.album-card .album-count {
+  grid-column: 1;
+  z-index: 1;
+  padding: 0 28px;
+}
 
 .album-title {
-  margin: 16px 0 2px;
-  font: 400 24px/1.2 var(--serif);
+  grid-row: 2;
+  margin: 0;
+  font: 700 28px/1.15 var(--display);
   overflow-wrap: anywhere;
 }
 
-@media (hover: hover) {
-  .feature:hover img,
-  .album-card a:hover img { transform: scale(1.04); }
+.album-card .album-count {
+  grid-row: 3;
+  margin: 4px 0 0;
+  padding-bottom: 24px;
 }
 
-/* Album page: title and count, mosaic of cropped tiles, then the previous/next pager. */
+/* Every frame is as tall as a 3:2 frame in a row of two, so a lone last card is 3:1. */
+.album-frame { height: calc((100cqi - var(--card-gap)) / 3); }
+.album-card--span-6 { grid-column: span 6; }
+.album-card--span-12 { grid-column: span 12; }
 
-/* Container units resolve against an ancestor, so main is the container for the mosaic. */
-.page-album main { container-type: inline-size; }
+@media (hover: hover) {
+  .album-card a:hover img { transform: scale(1.03); }
+}
 
+/* Album page: title and count, justified rows of photos, then the previous/next pager. */
+
+/* Each tile grows in proportion to its ratio, so every tile in a row has the same height;
+   the ::after spacer soaks up the free space of the last row so it keeps the base height. */
 .mosaic {
-  display: grid;
-  grid-template-columns: repeat(var(--mosaic-columns), minmax(0, 1fr));
-  grid-auto-rows: calc(
-    (100cqi - 2 * var(--page-gutter) - (var(--mosaic-columns) - 1) * var(--mosaic-gap))
-    / var(--mosaic-columns)
-  );
-  gap: var(--mosaic-gap);
-  margin: 0 var(--page-gutter);
-  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tile-gap);
+  margin: 0;
+  padding: 0 var(--tile-gap);
   list-style: none;
 }
 
-.tile { overflow: hidden; animation: fade-in 600ms ease both; }
+.mosaic::after { content: ""; flex: 999999 1 0; }
 
-.tile--wide { grid-column: span 2; }
-.tile--big { grid-column: span 2; grid-row: span 2; }
-.tile--full { grid-column: span 4; grid-row: span 2; }
+.tile {
+  flex: calc(var(--ratio) * 1000) 1 calc(var(--ratio) * 28vw);
+  min-width: 0;
+  aspect-ratio: var(--ratio);
+  overflow: hidden;
+  animation: fade-in 600ms ease both;
+}
 
 .tile a,
 .tile picture { display: block; width: 100%; height: 100%; }
@@ -308,39 +357,40 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 }
 
 .album-pager {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 96px var(--page-gutter) 0;
-  padding: 32px 0 0;
   border-top: 1px solid var(--line);
+  text-align: center;
 }
 
-.album-pager a { min-width: 0; }
+.album-pager a { min-width: 0; padding: 32px 16px 0; }
+
+.album-pager a + a { border-left: 1px solid var(--line); }
 
 .album-pager small {
   display: block;
+  margin-bottom: 8px;
   color: var(--muted);
-  font-size: 13px;
 }
 
-.album-pager span { font: 400 30px/1.2 var(--serif); overflow-wrap: anywhere; }
-
-.pager-next { text-align: right; }
+.album-pager span {
+  display: block;
+  font: 400 30px/1.2 var(--display);
+  overflow-wrap: anywhere;
+}
 
 .album-pager a:hover span {
   text-decoration: underline;
+  text-decoration-thickness: 1px;
   text-underline-offset: 6px;
 }
 
-/* About and Contact: a text column; Contact leads with the email address set large. */
+/* About and Contact: a centred text column; Contact leads with the email address set large. */
 
 .label {
   display: block;
   color: var(--muted);
-  font-size: 12px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
 }
 
 .text-link { padding-bottom: 2px; border-bottom: 1px solid currentColor; }
@@ -348,18 +398,19 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 .text-link:hover { border-bottom-color: transparent; }
 
 .text-column {
-  max-width: calc(720px + 2 * var(--page-gutter));
-  padding: 32px var(--page-gutter) 0;
+  max-width: calc(640px + 2 * var(--page-gutter));
+  margin: 0 auto;
+  padding: 40px var(--page-gutter) 0;
 }
 
 .lede {
   margin: 0 0 36px;
-  font: 400 34px/1.3 var(--serif);
-  letter-spacing: -0.005em;
+  font: 400 30px/1.3 var(--display);
+  text-align: center;
   overflow-wrap: anywhere;
 }
 
-.prose { font-size: 18px; line-height: 1.65; overflow-wrap: anywhere; }
+.prose { font-size: 17px; line-height: 1.7; overflow-wrap: anywhere; }
 
 .prose p { margin: 0 0 1.1em; }
 
@@ -368,36 +419,42 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
   padding-top: 24px;
   border-top: 1px solid var(--line);
   color: var(--muted);
+  text-align: center;
 }
 
 .contact-email {
-  display: inline-block;
-  margin: 32px var(--page-gutter) 56px;
-  padding-bottom: 6px;
-  border-bottom: 2px solid currentColor;
-  font: 400 clamp(36px, 6.4vw, 96px)/1.05 var(--serif);
-  letter-spacing: -0.02em;
+  display: block;
+  width: fit-content;
+  max-width: calc(100% - 2 * var(--page-gutter));
+  margin: 40px auto 56px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--fg);
+  font: 400 clamp(28px, 4vw, 52px)/1.15 var(--display);
+  text-align: center;
   overflow-wrap: anywhere;
 }
 
 .contact-email:hover { border-bottom-color: transparent; }
 
 .contact-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px 56px;
   margin: 0 var(--page-gutter);
-  padding: 28px 0 0;
-  border-top: 1px solid var(--line);
+  padding: 0;
   list-style: none;
+  text-align: center;
 }
 
-.page-heading + .contact-facts { margin-top: 32px; }
+.page-heading + .contact-facts { margin-top: 40px; }
+
+.contact-facts li { min-width: 0; max-width: 100%; }
 
 .contact-value {
   display: block;
   margin-top: 6px;
-  font: 400 22px/1.3 var(--serif);
+  font-size: 16px;
   overflow-wrap: anywhere;
 }
 
@@ -405,49 +462,60 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 
 .contact-form-section {
   max-width: calc(640px + 2 * var(--page-gutter));
-  margin-top: 72px;
+  margin: 72px auto 0;
   padding: 0 var(--page-gutter);
 }
 
-.section-heading { margin: 0 0 24px; font: 400 30px/1.2 var(--serif); }
+.section-heading {
+  margin: 0 0 28px;
+  font: 400 30px/1.2 var(--display);
+  text-align: center;
+}
 
-.contact-form { display: grid; gap: 20px; }
+/* Name and Email side by side; the message and the button take the full width. */
+.contact-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
 
 .contact-form label { display: grid; gap: 8px; }
+
+.contact-form label:has(textarea),
+.contact-form button { grid-column: 1 / -1; }
 
 .contact-form input,
 .contact-form textarea {
   display: block;
   width: 100%;
-  padding: 12px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
+  padding: 14px 16px;
+  border: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   color: var(--fg);
   font: inherit;
-  font-size: 17px;
+  font-size: 16px;
 }
 
-.contact-form textarea { resize: vertical; }
+.contact-form textarea { min-height: 160px; resize: vertical; }
 
-/* A transparent outline still shows in forced-colors mode, where the shadow is dropped. */
+/* A transparent outline still shows in forced-colors mode, where the border change is lost. */
 .contact-form input:focus,
 .contact-form textarea:focus {
   outline: 2px solid transparent;
-  border-bottom-color: var(--fg);
-  box-shadow: 0 1px 0 var(--fg);
+  border-color: var(--fg);
 }
 
 .contact-form button {
-  justify-self: start;
-  padding: 14px 32px;
-  border: 0;
+  justify-self: center;
+  margin-top: 8px;
+  padding: 14px 44px;
+  border: 1px solid var(--fg);
   background: var(--fg);
   color: var(--bg);
   font: inherit;
-  font-size: 13px;
-  letter-spacing: 0.16em;
+  font-size: 11px;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
   cursor: pointer;
 }
@@ -539,61 +607,52 @@ html:has(.lightbox[open]) { overflow: hidden; }
   .lightbox-image { transition: none; }
   .tile a:hover img,
   .tile a:focus-visible img,
-  .feature:hover img,
   .album-card a:hover img { transform: none; }
 }
 
-/* Tablets and small laptops: the feature text goes below its frame. */
-
-@media (max-width: 1023px) {
-  .feature { display: block; }
-
-  .feature-label { margin-top: 16px; }
-}
-
-/* Phones: one column everywhere; album photos uncropped. */
+/* Phones: one column everywhere; album photos uncropped at their own ratio. */
 
 @media (max-width: 767px) {
-  :root { --page-gutter: 20px; }
+  .site-header { gap: 12px; padding: 28px 52px 24px; }
 
-  .site-header { gap: 14px 16px; padding-top: 24px; }
+  .site-title { font-size: 30px; }
 
-  .site-title { font-size: 18px; }
+  .site-nav { gap: 8px 22px; }
 
-  .site-nav { gap: 16px; }
-
-  .page-heading,
-  .album-heading { padding-top: 40px; font-size: 44px; }
-
-  .feature { margin-bottom: 36px; }
+  .theme-toggle { top: 28px; right: 8px; }
 
   .feature-frame { aspect-ratio: 4 / 5; }
 
-  .feature-title { font-size: 30px; }
+  .feature-text { padding: 80px 20px 20px; }
 
-  .album-grid { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .album-grid { grid-template-columns: minmax(0, 1fr); }
 
   .album-grid .album-card { grid-column: auto; }
 
-  .album-grid .album-frame { height: auto; aspect-ratio: 4 / 5; }
+  .album-grid .album-frame { height: auto; aspect-ratio: 3 / 2; }
 
-  .mosaic { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+  .album-title,
+  .album-card .album-count { padding-right: 20px; padding-left: 20px; }
 
-  .tile--wide,
-  .tile--big,
-  .tile--full { grid-column: auto; grid-row: auto; }
+  .album-card .album-count { padding-bottom: 20px; }
 
-  .tile img { height: auto; }
+  .mosaic { flex-direction: column; gap: 4px; padding: 0; }
 
-  .album-pager { margin-top: 56px; }
+  .mosaic::after { display: none; }
 
-  .album-pager span { font-size: 22px; }
+  .tile { flex: none; width: 100%; }
 
-  .lede { font-size: 25px; }
+  .album-pager { grid-template-columns: minmax(0, 1fr); margin-top: 56px; }
+
+  .album-pager a { padding-bottom: 32px; }
+
+  .album-pager a + a { border-top: 1px solid var(--line); border-left: 0; }
+
+  .lede { font-size: 23px; }
 
   .contact-email { margin-bottom: 36px; }
 
-  .contact-facts { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .contact-form { grid-template-columns: minmax(0, 1fr); }
 
   .lightbox-image { max-width: 100vw; max-height: calc(100dvh - 140px); }
 

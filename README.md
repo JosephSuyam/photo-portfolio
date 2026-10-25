@@ -7,6 +7,10 @@ root folder becomes an album; each image inside it becomes a photo. Optional `ab
 form to the Contact page. See [Drive folder conventions](docs/drive-conventions.md) and
 [Setup](docs/setup.md#contact-form-optional).
 
+The look follows [reel.format.com](https://reel.format.com/): white or black themes, Bodoni
+headlines, a full-bleed feature of the latest album over a grid of cover cards, and album
+pages of uncropped photos in justified rows.
+
 ## Quick start
 
 1. Install [uv](https://docs.astral.sh/uv/) and [Node.js](https://nodejs.org/) 20+, then
@@ -44,3 +48,9 @@ The server listens on `localhost` only. It is for previewing, not for hosting.
 - [Setup](docs/setup.md)
 - [Drive folder conventions](docs/drive-conventions.md)
 - [Architecture](docs/architecture.md)
+
+## Credits
+
+Headlines use [Bodoni Moda](https://fonts.google.com/specimen/Bodoni+Moda), self-hosted in
+`src/reel/static/fonts/` and licensed under the SIL Open Font License 1.1 (see
+`src/reel/static/fonts/OFL.txt`).
