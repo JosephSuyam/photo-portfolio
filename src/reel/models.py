@@ -1,4 +1,4 @@
-"""Domain models: albums and the photos inside them."""
+"""Domain models: albums, the photos inside them, and the root text pages."""
 
 import re
 from datetime import datetime
@@ -31,10 +31,22 @@ class Album(BaseModel):
     cover: Photo | None = None
 
 
+class TextFile(BaseModel):
+    """A plain-text page source in the Drive root (about.txt, contact.txt)."""
+
+    file_id: str
+    name: str
+    mime_type: str
+    md5_checksum: str | None = None
+    modified_time: datetime
+
+
 class Manifest(BaseModel):
     """Everything sync learned from Drive, already ordered, titled, and slugged."""
 
     albums: list[Album]
+    about: TextFile | None = None
+    contact: TextFile | None = None
 
 
 def original_path(cache_dir: Path, file_id: str) -> Path:
