@@ -6,7 +6,9 @@ The fixture has five albums (the first with an explicit cover.* file) of gradien
 mixed orientations. "Landscapes" has eleven photos: both mosaic groups ([big, small, small, wide]
 and [wide, big, small, small]) plus a remainder of three. "Still Life", the last, has a single
 photo. Every (size, colour) pair is unique, so no two photos share a content-hashed file.
-It never touches Google Drive or the network.
+The root also has an about.txt (three paragraphs) and a contact.txt (an email, a link, and a
+plain entry), and the contact page gets a form posting to a fake https URL that the tests
+intercept. It never touches Google Drive or the network.
 """
 
 import argparse
@@ -18,13 +20,28 @@ from pathlib import Path
 from PIL import Image
 
 from reel.build import build_site
-from reel.models import Album, Manifest, Photo, original_path
+from reel.models import Album, Manifest, Photo, TextFile, original_path
 from reel.scripts import PROJECT_ROOT, compile_scripts
 from reel.server import make_preview_server
 
 FIXTURE_DIR = PROJECT_ROOT / ".tmp" / "e2e"
 SITE_TITLE = "Reel E2E"
 _MODIFIED = datetime(2026, 1, 1, tzinfo=UTC)
+CONTACT_FORM_URL = "https://forms.example.test/f/reel-e2e"
+ABOUT_TEXT = (
+    "I photograph quiet places at the edges of cities, mostly at dusk.\r\n"
+    "\r\n"
+    "Most of this work is made on medium-format film and printed by hand\r\n"
+    "in a small darkroom.\r\n"
+    "\r\n"
+    "Prints and commissions are available on request.\r\n"
+)
+CONTACT_TEXT = (
+    "# Shown on /contact/\n"
+    "Email: studio@example.test\n"
+    "Instagram: https://instagram.example.test/reel-e2e/\n"
+    "Based in: Lisbon, Portugal\n"
+)
 
 # (album title, slug, [(width, height), ...], has cover file)
 ALBUMS = [
@@ -88,7 +105,16 @@ def make_manifest(cache: Path) -> Manifest:
         albums.append(
             Album(folder_id=slug, name=title, title=title, slug=slug, photos=photos, cover=cover)
         )
-    return Manifest(albums=albums)
+    return Manifest(
+        albums=albums,
+        about=_text_file(cache, "page-about", "about.txt", ABOUT_TEXT),
+        contact=_text_file(cache, "page-contact", "Contact.txt", CONTACT_TEXT),
+    )
+
+
+def _text_file(cache: Path, file_id: str, name: str, text: str) -> TextFile:
+    original_path(cache, file_id).write_bytes(text.encode("utf-8"))
+    return TextFile(file_id=file_id, name=name, mime_type="text/plain", modified_time=_MODIFIED)
 
 
 def build_fixture_site() -> Path:
@@ -99,7 +125,14 @@ def build_fixture_site() -> Path:
     (cache / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
     with tempfile.TemporaryDirectory(prefix="reel-scripts-") as scripts_dir:
         compile_scripts(Path(scripts_dir))
-        build_site(manifest, cache, dist, SITE_TITLE, scripts_dir=Path(scripts_dir))
+        build_site(
+            manifest,
+            cache,
+            dist,
+            SITE_TITLE,
+            scripts_dir=Path(scripts_dir),
+            contact_form_url=CONTACT_FORM_URL,
+        )
     return dist
 
 

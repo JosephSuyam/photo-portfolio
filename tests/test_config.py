@@ -102,3 +102,111 @@ def test_load_site_settings_empty_value_uses_default(tmp_path: Path) -> None:
 
     settings = load_site_settings(tmp_path / "missing.env", environ={"SITE_TITLE": ""})
     assert settings.site_title == "Portfolio"
+
+
+# CONTACT_FORM_URL
+
+FORM_URL = "https://forms.example.test/f/reel"
+FORM_URL_ERROR = "CONTACT_FORM_URL must be an https:// URL."
+INVALID_FORM_URLS = [
+    "http://forms.example.test/f/reel",
+    "ftp://forms.example.test/f/reel",
+    "javascript:alert(1)",
+    "forms.example.test/f/reel",
+    "https://",
+    "https:///f/reel",
+    "https://forms.example.test/f reel",
+    "https://forms.example.test/f\treel",
+    "https://forms.example.test/f\x07reel",
+    'https://forms.example.test/f"onmouseover=alert(1)',
+    "https://forms.example.test/f'x",
+    "https://forms.example.test/<script>",
+    "https://forms.example.test/f>",
+]
+
+
+def test_load_site_settings_contact_form_url_https_accepted(tmp_path: Path) -> None:
+    from reel.config import load_site_settings
+
+    settings = load_site_settings(tmp_path / "missing.env", environ={"CONTACT_FORM_URL": FORM_URL})
+    assert settings.contact_form_url == FORM_URL
+
+
+def test_load_site_settings_contact_form_url_unset_is_none(tmp_path: Path) -> None:
+    from reel.config import load_site_settings
+
+    settings = load_site_settings(tmp_path / "missing.env", environ={})
+    assert settings.contact_form_url is None
+
+
+def test_load_site_settings_contact_form_url_empty_is_none(tmp_path: Path) -> None:
+    from reel.config import load_site_settings
+
+    settings = load_site_settings(tmp_path / "missing.env", environ={"CONTACT_FORM_URL": ""})
+    assert settings.contact_form_url is None
+
+
+@pytest.mark.parametrize("url", INVALID_FORM_URLS)
+def test_load_site_settings_contact_form_url_invalid_raises_config_error(
+    tmp_path: Path, url: str
+) -> None:
+    from reel.config import load_site_settings
+
+    with pytest.raises(ConfigError) as error:
+        load_site_settings(tmp_path / "missing.env", environ={"CONTACT_FORM_URL": url})
+    assert str(error.value) == FORM_URL_ERROR
+
+
+@pytest.mark.parametrize("url", [url for url in INVALID_FORM_URLS if url not in FORM_URL_ERROR])
+def test_load_site_settings_contact_form_url_error_does_not_echo_value(
+    tmp_path: Path, url: str
+) -> None:
+    from reel.config import load_site_settings
+
+    with pytest.raises(ConfigError) as error:
+        load_site_settings(tmp_path / "missing.env", environ={"CONTACT_FORM_URL": url})
+    assert url not in str(error.value)
+
+
+def test_load_settings_contact_form_url_invalid_raises_config_error(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match=r"^CONTACT_FORM_URL must be an https:// URL\.$"):
+        load_settings(
+            tmp_path / "missing.env",
+            environ={**REQUIRED, "CONTACT_FORM_URL": "http://forms.example.test/f"},
+        )
+
+
+def test_load_settings_contact_form_url_valid_accepted(tmp_path: Path) -> None:
+    settings = load_settings(
+        tmp_path / "missing.env", environ={**REQUIRED, "CONTACT_FORM_URL": FORM_URL}
+    )
+    assert settings.contact_form_url == FORM_URL
+
+
+def test_load_site_settings_contact_form_url_read_from_env_file(tmp_path: Path) -> None:
+    from reel.config import load_site_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"CONTACT_FORM_URL={FORM_URL}\n", encoding="utf-8")
+    settings = load_site_settings(env_file, environ={})
+    assert settings.contact_form_url == FORM_URL
+
+
+def test_load_site_settings_contact_form_url_environ_overrides_env_file(tmp_path: Path) -> None:
+    from reel.config import load_site_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("CONTACT_FORM_URL=https://file.example.test/f\n", encoding="utf-8")
+    settings = load_site_settings(env_file, environ={"CONTACT_FORM_URL": FORM_URL})
+    assert settings.contact_form_url == FORM_URL
+
+
+def test_load_site_settings_invalid_env_file_url_overridden_by_valid_environ(
+    tmp_path: Path,
+) -> None:
+    from reel.config import load_site_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("CONTACT_FORM_URL=http://file.example.test/f\n", encoding="utf-8")
+    settings = load_site_settings(env_file, environ={"CONTACT_FORM_URL": FORM_URL})
+    assert settings.contact_form_url == FORM_URL
