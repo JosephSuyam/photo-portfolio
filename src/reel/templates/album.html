@@ -3,6 +3,7 @@
 {% block title %}{{ album.title }} | {{ site_title }}{% endblock %}
 {% block content %}
 <h1 class="album-heading">{{ album.title }}</h1>
+<p class="album-count">{{ album.count }}</p>
 <ul class="mosaic">
   {% for photo in album.photos %}
   <li class="tile tile--{{ photo.shape }}">
@@ -18,9 +19,15 @@
   {% endfor %}
 </ul>
 {% if next_album %}
-<nav class="next-album" aria-label="Next album">
-  <p>Next</p>
-  <h2><a href="{{ base_path }}{{ next_album.slug }}/">{{ next_album.title }}</a></h2>
+<nav class="album-pager" aria-label="More albums">
+  <a class="pager-prev" rel="prev" href="{{ base_path }}{{ previous_album.slug }}/">
+    <small>&larr; Previous</small>
+    <span>{{ previous_album.title }}</span>
+  </a>
+  <a class="pager-next" rel="next" href="{{ base_path }}{{ next_album.slug }}/">
+    <small>Next &rarr;</small>
+    <span>{{ next_album.title }}</span>
+  </a>
 </nav>
 {% endif %}
 {% if script_names %}

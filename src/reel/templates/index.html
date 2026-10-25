@@ -1,21 +1,39 @@
 {% extends "base.html" %}
 {% set nav_work_current = true %}
+{% macro picture(cover, eager=false) %}
+<picture>
+  <source srcset="{{ cover.webp_srcset }}" sizes="{{ cover.sizes }}" type="image/webp">
+  <img src="{{ cover.src }}" srcset="{{ cover.jpeg_srcset }}" sizes="{{ cover.sizes }}"
+       width="{{ cover.width }}" height="{{ cover.height }}" alt=""
+       {% if not eager %}loading="lazy"{% endif %}>
+</picture>
+{% endmacro %}
 {% block content %}
-<h1 class="visually-hidden">{{ site_title }}</h1>
-<ul class="album-strip" data-horizontal-scroll>
-  {% for album in albums %}
-  <li class="album-tile">
-    <a href="{{ base_path }}{{ album.slug }}/">
-      <picture>
-        <source srcset="{{ album.cover.webp_srcset }}" sizes="{{ album.cover.sizes }}" type="image/webp">
-        <img src="{{ album.cover.src }}" srcset="{{ album.cover.jpeg_srcset }}"
-             sizes="{{ album.cover.sizes }}" width="{{ album.cover.width }}"
-             height="{{ album.cover.height }}" alt=""
-             {% if not loop.first %}loading="lazy"{% endif %}>
-      </picture>
-      <span class="album-title">{{ album.title }}</span>
-    </a>
-  </li>
-  {% endfor %}
-</ul>
+<h1 class="page-heading">Work</h1>
+<p class="page-meta">{{ summary }}</p>
+{% if feature %}
+<section class="albums" data-album-preview>
+  <a class="feature" href="{{ base_path }}{{ feature.slug }}/">
+    <div class="feature-frame">{{ picture(feature.cover, eager=true) }}</div>
+    <div class="feature-text">
+      <span class="feature-label">Latest album</span>
+      <h2 class="feature-title">{{ feature.title }}</h2>
+      <p class="feature-count">{{ feature.count }}</p>
+    </div>
+  </a>
+  {% if cards %}
+  <ul class="album-grid">
+    {% for card in cards %}
+    <li class="album-card album-card--span-{{ card.span }}">
+      <a href="{{ base_path }}{{ card.slug }}/" data-feature-sizes="{{ card.feature_sizes }}">
+        <div class="album-frame">{{ picture(card.cover) }}</div>
+        <h2 class="album-title">{{ card.title }}</h2>
+        <p class="album-count">{{ card.count }}</p>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}
