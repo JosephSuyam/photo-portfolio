@@ -1,0 +1,10 @@
+{
+  "_comment": "Upload as contact.json to the Drive root, next to the album folders. email is shown large at the top. details are shown in this order; values starting with https:// or http:// and email addresses become links, anything else is plain text.",
+  "email": "hello@example.com",
+  "details": [
+    { "label": "Instagram", "value": "https://instagram.com/yourhandle" },
+    { "label": "Website", "value": "https://example.com" },
+    { "label": "Based in", "value": "Example City, Country" },
+    { "label": "Available for", "value": "Commissions, editorial, prints" }
+  ]
+}

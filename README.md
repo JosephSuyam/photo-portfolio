@@ -1,8 +1,8 @@
 # reel
 
 A static photographer portfolio generated from a Google Drive folder. Each subfolder of the
-root folder becomes an album; each image inside it becomes a photo. Optional `about.txt` and
-`contact.txt` in the root add About and Contact pages (samples in
+root folder becomes an album; each image inside it becomes a photo. Optional `about.json` and
+`contact.json` in the root add About and Contact pages (samples in
 [docs/examples/](docs/examples/)), and the optional `CONTACT_FORM_URL` setting adds a message
 form to the Contact page. See [Drive folder conventions](docs/drive-conventions.md) and
 [Setup](docs/setup.md#contact-form-optional).

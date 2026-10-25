@@ -2,8 +2,8 @@
 
 ```
 Portfolio/            <- root folder (DRIVE_ROOT_FOLDER_ID)
-  about.txt           <- optional, About page at /about/
-  contact.txt         <- optional, Contact page at /contact/
+  about.json          <- optional, About page at /about/
+  contact.json        <- optional, Contact page at /contact/
   01 Book I/          <- album "01 Book I", URL /01-book-i/
     cover.jpg         <- album cover
     001.jpg
@@ -39,47 +39,57 @@ Portfolio/            <- root folder (DRIVE_ROOT_FOLDER_ID)
 
 ## About and Contact pages
 
-Upload `about.txt` and `contact.txt` to the Drive root, next to the album folders. They
+Upload `about.json` and `contact.json` to the Drive root, next to the album folders. They
 are then shared with the service account like everything else in the root. Ready-to-edit
-samples: [`docs/examples/about.txt`](examples/about.txt) and
-[`docs/examples/contact.txt`](examples/contact.txt).
+samples: [`docs/examples/about.json`](examples/about.json) and
+[`docs/examples/contact.json`](examples/contact.json).
 
-- Names are matched ignoring case and surrounding spaces (`About.txt` works; `about.md`,
-  `about`, `about.txt.bak` don't). Other files in the root are ignored.
-- The file must be plain text (a `text/*` type in Drive). A Google Doc, a folder, or a
-  shortcut with that name is skipped with a warning. Keep Drive's "Convert uploads" setting
-  off, or the upload becomes a Google Doc.
+- Names are matched ignoring case and surrounding spaces (`About.JSON` works; `about.txt`,
+  `about`, `about.json.txt` don't). Other files in the root are ignored.
+- Files are matched by name, whatever type Drive gives them (`application/json`,
+  `text/plain`, ...). Folders, shortcuts, and files Drive converted (e.g. to a Google Doc)
+  are skipped with a warning. Keep Drive's "Convert uploads" setting off, or the upload
+  becomes a Google Doc.
 - Several files with the same name: the first usable one in natural order wins; the others
   are skipped with a warning.
-- No file, or nothing usable in it (empty, only blank lines or comments) -> no page and no
-  nav link. Files over 64 KiB or not UTF-8 are skipped with a warning, and the page is
-  left out.
+- No file -> no page and no nav link. Files over 64 KiB, not UTF-8, not valid JSON, or not
+  in the shape below are skipped with a warning, and the page is left out. The warning
+  names the field (e.g. `details.1.label: Field required`) but never shows the contents.
+  One invalid entry in `details` (e.g. an empty `label`) leaves out the whole Contact page.
+- JSON has no comments, so keys the site doesn't use (such as `"_comment"`) are ignored. A
+  misspelled key (`"paragraph"`) is ignored too. If a key appears twice, the last one is
+  used. Invisible control characters (e.g. NUL, bidi overrides) are removed from the About
+  text.
 
-`about.txt`: paragraphs separated by blank lines. The first is the lede, shown large. Line
-breaks inside a paragraph are joined into one line.
+`about.json`: `lede` (required) is shown large; each entry of `paragraphs` (optional) is one
+paragraph. Line breaks and repeated spaces inside a string become single spaces; empty
+paragraphs are dropped.
 
-```
-I photograph people at work.
-
-Based in Lisbon, shooting portraits and editorial
-commissions since 2015.
-```
-
-`contact.txt`: one `Label: value` per line; blank lines and lines starting with `#` are
-ignored, malformed lines are skipped with a warning.
-
-```
-# The first Email is shown large at the top.
-Email: hello@example.com
-Instagram: https://instagram.com/yourhandle
-Studio: studio@example.com
-Based in: Lisbon, Portugal
+```json
+{
+  "lede": "I photograph people at work.",
+  "paragraphs": ["Based in Lisbon, shooting portraits and editorial commissions since 2015."]
+}
 ```
 
-- The first valid `Email` line (any case) becomes the large address; later ones are listed
-  like other entries. An `Email` value that isn't an address is skipped with a warning.
+`contact.json`: `email` (optional) is shown large at the top; `details` (optional) are
+listed in order, each with a `label` and a `value` (both non-empty text).
+
+```json
+{
+  "email": "hello@example.com",
+  "details": [
+    { "label": "Instagram", "value": "https://instagram.com/yourhandle" },
+    { "label": "Studio", "value": "studio@example.com" },
+    { "label": "Based in", "value": "Lisbon, Portugal" }
+  ]
+}
+```
+
+- An `email` that isn't an address is dropped with a warning; the details are kept. No
+  `email` and no `details` -> no page (with a warning).
 - `https://` and `http://` values become links, shown without the scheme and trailing `/`
   (`instagram.com/yourhandle`). Email addresses become `mailto:` links.
 - Anything else (`@yourhandle`, `Lisbon, Portugal`) is plain text.
-- With a `contact.txt`, the About page ends with a link to Contact.
+- With a `contact.json`, the About page ends with a link to Contact.
 - An optional message form: see [Setup](setup.md#contact-form-optional).

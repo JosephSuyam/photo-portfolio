@@ -10,8 +10,8 @@
    - `SITE_TITLE`, `SITE_BASE_URL` (optional)
    - `CONTACT_FORM_URL` (optional, see [Contact form](#contact-form-optional))
 4. Optional: for About and Contact pages, edit
-   [`docs/examples/about.txt`](examples/about.txt) and
-   [`docs/examples/contact.txt`](examples/contact.txt) and upload them to the Drive root,
+   [`docs/examples/about.json`](examples/about.json) and
+   [`docs/examples/contact.json`](examples/contact.json) and upload them to the Drive root,
    next to the album folders. Format and rules:
    [Drive folder conventions](drive-conventions.md#about-and-contact-pages).
 
@@ -24,8 +24,9 @@ its terminals may still carry the old values.
 
 ## Contact form (optional)
 
-Adds a "Send a message" form to the Contact page (which needs a `contact.txt`). The site is
-static, so a form service receives the messages.
+Adds a "Send a message" form to the Contact page. The site is static, so a form service
+receives the messages. The Contact page needs a usable `contact.json`; without one,
+`reel build` warns that the form is not shown.
 
 1. Pick a service that accepts a plain HTML form POST, e.g. [Formspree](https://formspree.io/).
    Create a form and copy its `https://` endpoint.

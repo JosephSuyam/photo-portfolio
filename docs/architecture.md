@@ -4,8 +4,8 @@
 Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--> browser
 ```
 
-- **sync** (`sync.py`, via `drive.py`): lists albums, photos, and the root `about.txt` /
-  `contact.txt`, downloads only what changed
+- **sync** (`sync.py`, via `drive.py`): lists albums, photos, and the root `about.json` /
+  `contact.json`, downloads only what changed
   (`md5Checksum`/`modifiedTime`), and removes cache entries deleted from Drive.
 - **build** (`build.py`, `images.py`, `pages.py`, `scripts.py`): compiles `src/reel/ts/` with the
   project's local `tsc` into a temporary folder, makes content-hashed thumbnails and display
@@ -29,7 +29,7 @@ Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--
   TextFile | null}` (see `models.py`), already ordered, titled, and slugged by sync. Build
   renders albums in this order. `about`/`contact` are optional, so older manifests without
   them still load.
-- `.cache/originals/<file_id>`: the downloaded original for each photo and text file, with
+- `.cache/originals/<file_id>`: the downloaded original for each photo and page file, with
   the same incremental download and stale-removal rules. File IDs must match
   `[A-Za-z0-9_-]+`.
 
@@ -39,8 +39,8 @@ Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--
 dist/
   index.html, work/index.html   album index: "Work", feature card, grid of album cards
   <slug>/index.html             album page: title, photo count, mosaic, lightbox, Previous/Next pager
-  about/index.html              About page (only with a usable about.txt)
-  contact/index.html            Contact page (only with a usable contact.txt)
+  about/index.html              About page (only with a usable about.json)
+  contact/index.html            Contact page (only with a usable contact.json)
   images/<hash>.webp|.jpg       thumbnails (600px wide) and display images (2000px long edge)
   static/                       site.css and compiled JavaScript (theme.js, album-preview.js, lightbox.js)
   .reel-build                   marker: this directory was written by `reel build`
@@ -48,9 +48,9 @@ dist/
 
 - Slugs must be lowercase letters and digits with single hyphens, unique, and not `work`,
   `static`, `images`, `about`, or `contact`; otherwise the build fails.
-- A photo that can't be decoded is skipped with a warning. A text file that is too large,
-  not UTF-8, or has nothing usable leaves its page out with a warning. A missing original
-  fails the build.
+- A photo that can't be decoded is skipped with a warning. A page file that is too large,
+  not UTF-8, not valid JSON, or the wrong shape leaves its page out with a warning. A
+  missing original fails the build.
 - The site is built in `.dist.staging/` and swapped in only on success, so a failed build
   leaves the previous `dist/` as it was. Build refuses to replace a non-empty `dist/` without
   the `.reel-build` marker.
@@ -78,8 +78,11 @@ an in-memory fake in `tests/fixtures/fake_drive.py`.
 
 ## About and Contact
 
-Parsed by `pages.py` from the root text files ([format](drive-conventions.md#about-and-contact-pages)).
-All Drive text is autoescaped; only `http(s)://` and email values become links.
+`pages.py` reads the root JSON files ([format](drive-conventions.md#about-and-contact-pages))
+and validates them with pydantic models (`AboutFile`, `ContactFile`, `ContactDetail`; unknown
+keys ignored, strings stripped, no type coercion). Validation warnings name the field
+(`details.1.label`) but never echo the file's contents. All Drive text is autoescaped; only
+`http(s)://` and email values become links.
 
 - **About**: "About" heading, the lede in large serif, then the paragraphs in a narrow
   column. With a Contact page it ends with a "Commissions and print enquiries: Contact" link.
