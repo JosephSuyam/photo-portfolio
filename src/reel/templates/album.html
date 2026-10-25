@@ -1,23 +1,35 @@
 {% extends "base.html" %}
+{% set page_class = "page-album" %}
 {% block title %}{{ album.title }} | {{ site_title }}{% endblock %}
 {% block content %}
-<h1 class="visually-hidden">{{ album.title }}</h1>
-<div class="photo-strip" data-horizontal-scroll>
+<h1 class="album-heading">{{ album.title }}</h1>
+<ul class="mosaic">
   {% for photo in album.photos %}
-  <figure class="photo">
-    <picture>
-      <source srcset="{{ photo.webp_srcset }}" sizes="{{ photo.sizes }}" type="image/webp">
-      <img src="{{ photo.src }}" srcset="{{ photo.jpeg_srcset }}" sizes="{{ photo.sizes }}"
-           width="{{ photo.width }}" height="{{ photo.height }}" alt=""
-           {% if not loop.first %}loading="lazy"{% endif %}>
-    </picture>
-  </figure>
+  <li class="tile tile--{{ photo.shape }}">
+    <a href="{{ photo.href }}" data-lightbox aria-label="Open photo {{ loop.index }} of {{ loop.length }}">
+      <picture>
+        <source srcset="{{ photo.webp_srcset }}" sizes="{{ photo.sizes }}" type="image/webp">
+        <img src="{{ photo.src }}" srcset="{{ photo.jpeg_srcset }}" sizes="{{ photo.sizes }}"
+             width="{{ photo.width }}" height="{{ photo.height }}" alt=""
+             {% if not loop.first %}loading="lazy"{% endif %}>
+      </picture>
+    </a>
+  </li>
   {% endfor %}
-  {% if next_album %}
-  <div class="next-album">
-    <p>Next</p>
-    <h2><a href="{{ base_path }}{{ next_album.slug }}/">{{ next_album.title }}</a></h2>
-  </div>
-  {% endif %}
-</div>
+</ul>
+{% if next_album %}
+<nav class="next-album" aria-label="Next album">
+  <p>Next</p>
+  <h2><a href="{{ base_path }}{{ next_album.slug }}/">{{ next_album.title }}</a></h2>
+</nav>
+{% endif %}
+{% if script_names %}
+<dialog class="lightbox" aria-label="Photo viewer">
+  <img class="lightbox-image" alt="">
+  <p class="lightbox-counter" aria-live="polite"></p>
+  <button type="button" class="lightbox-close" aria-label="Close">&times;</button>
+  <button type="button" class="lightbox-prev" aria-label="Previous photo">&lsaquo;</button>
+  <button type="button" class="lightbox-next" aria-label="Next photo">&rsaquo;</button>
+</dialog>
+{% endif %}
 {% endblock %}

@@ -1,4 +1,4 @@
-// Scroll the horizontal strips with a regular mouse wheel, as on the reference site.
+// Scroll the album index strip with a regular mouse wheel, as on the reference site.
 
 function scrollSidewaysOnWheel(strip: HTMLElement): void {
   strip.addEventListener(
