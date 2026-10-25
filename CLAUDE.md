@@ -35,15 +35,15 @@ A photographer portfolio modeled on https://reel.format.com/, generated from a G
 The `orchestrator` agent (`claude --agent orchestrator`, or `/orchestrate <task>` from any session) plans, delegates, verifies, and summarizes; only it delegates (other agents have no Agent tool). Agents: `implementer` (code), `test-writer` (pytest + Playwright), `debugger`, `code-reviewer`, `doc-writer`; skills: `run-tests` (Full check), `preview-site` (screenshots). Delegate large or noisy work with goal, paths, constraints, and output format; do small edits yourself.
 
 1. Understand; ask if ambiguous; plan briefly for 3+ files or a public interface.
-2. Tests first (bug fixes start with a failing test), then the smallest change that works.
-3. Full check; for UI changes also `preview-site`. Then `code-reviewer`: fix blocking and should-fix findings and re-run the Full check. Update docs (README, `docs/`, CHANGELOG) if behavior, config, conventions, or CLI changed.
+2. The smallest change that works. No new tests unless the user asks.
+3. `uv run ruff check . && uv run mypy src` and a manual run (`reel watch`; UI: `preview-site`). Then `code-reviewer`: fix blocking and should-fix findings. Docs only when the user asks.
 
-**Done means:** Full check run and green; new behavior tested with an edge case and a failure path; no open blocking review findings; docs current; no debug prints, commented-out code, or TODOs without an issue. Never weaken, skip, or mock away what a test checks. Tests never touch the real Drive or the network. If something cannot be run, say so.
+**Done means:** ruff and mypy green and the change seen working; no open blocking review findings; no debug prints, commented-out code, or TODOs without an issue. Never weaken, skip, or mock away what a test checks. Tests never touch the real Drive or the network. If something cannot be run, say so.
 
 **End every task with a summary** (plain language, skimmable in a minute; skip empty parts):
 - **Result:** one or two sentences on what the user can do or see now.
 - **What changed:** a table (Area | Change | Files) when there are three or more changes.
-- **How it was verified:** Full check per step with counts; manual checks and what was seen.
+- **How it was verified:** ruff/mypy results; manual checks and what was seen.
 - **Decisions and open items:** choices made for the user, risks, failures or skipped checks (with output; never hide them), and the next step as a question if it needs the user.
 
 ## Safety
