@@ -21,14 +21,13 @@ Portfolio/            <- root folder (DRIVE_ROOT_FOLDER_ID)
   choose it, give it the lowest prefix (`01 Book I`). The others follow as cards in the same
   order, and the album pages' Previous/Next links follow it too.
 - The album title shown on the site is the folder name exactly as written, prefix included.
-- Photos are ordered by filename, naturally. The order decides the album page layout: photos
-  are cropped into a mosaic (shown whole in the lightbox and on phones), and the 1st and 6th
-  of every 8 get the big tiles. Put the photos that should be big in those positions. If
-  the count isn't a multiple of 4, the last 1-3 photos get larger tiles (one leftover is full
-  width) so there are no gaps.
+- Photos are ordered by filename, naturally, and the album page shows them in that order in
+  justified rows: each photo whole at its own aspect ratio, never cropped. Panoramas take
+  more of a row, portraits less.
 - The cover is a file named `cover.*`, otherwise the first photo. The index crops it to fill
-  its card (16:9 for the featured album; cards are taller or wider depending on how many
-  share the row), so keep the subject near the center.
+  its frame (21:9 for the featured album, 3:2 for cards, 3:1 for a lone last card, 4:5 for
+  the feature on phones), and the album title is set over its lower edge, so keep the
+  subject near the center and clear of the bottom-left.
 - Supported: JPEG, PNG, WebP. Other files and shortcuts are skipped.
 - Each album's URL slug comes from its title ("01 Book I" -> `/01-book-i/`). If two albums
   share a slug, the later one gets `-2`, `-3`, and so on. `work`, `static`, `images`,

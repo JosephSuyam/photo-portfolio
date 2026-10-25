@@ -6,7 +6,7 @@
 <p class="album-count">{{ album.count }}</p>
 <ul class="mosaic">
   {% for photo in album.photos %}
-  <li class="tile tile--{{ photo.shape }}">
+  <li class="tile" style="--ratio: {{ photo.ratio }}">
     <a href="{{ photo.href }}" data-lightbox aria-label="Open photo {{ loop.index }} of {{ loop.length }}">
       <picture>
         <source srcset="{{ photo.webp_srcset }}" sizes="{{ photo.sizes }}" type="image/webp">

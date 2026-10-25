@@ -32,26 +32,17 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 MOBILE_MAX_WIDTH_PX = 767
 
-# Album index: the first album in a wide feature card, the rest in a 12-column grid of cards
-# that all share one height; keep in sync with site.css.
-FEATURE_WIDTH_VW = 66
-FEATURE_ASPECT = Fraction(16, 9)
+# Album index: the first album in a full-bleed feature, the rest in a 12-column grid of cards,
+# two per row, that all share one height; keep in sync with site.css.
+FEATURE_WIDTH_VW = 100
+FEATURE_ASPECT = Fraction(21, 9)
 GRID_COLUMNS = 12
-CARDS_PER_ROW = 4
-# Span of each card in the last row(s) by the number of cards left after full rows.
-LAST_ROW_SPANS = {1: (4, 4, 4, 6, 6), 2: (6, 6), 3: (4, 4, 4)}
+CARDS_PER_ROW = 2
+CARD_FRAME_ASPECT = Fraction(3, 2)
 
-# Album mosaic on a 4-column grid of square cells; keep in sync with site.css.
-# Each 4-photo group fills a 4x2 block, alternating sides so the big tile zigzags.
-MOSAIC_GROUP_SIZE = 4
-MOSAIC_GROUPS = (("big", "small", "small", "wide"), ("wide", "big", "small", "small"))
-MOSAIC_REMAINDERS = {
-    1: (("full",), ("full",)),
-    2: (("big", "big"), ("big", "big")),
-    3: (("big", "wide", "wide"), ("wide", "big", "wide")),
-}
-# Shape -> (tile width in vw on desktop, tile width / height).
-MOSAIC_TILES = {"small": (25, 1), "wide": (50, 2), "big": (50, 1), "full": (100, 2)}
+# Album page: justified rows whose tiles keep each photo's own ratio; a row is about this
+# tall before it stretches to fill the width. Keep in sync with site.css.
+ROW_HEIGHT_VW = 28
 
 _SLUG_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 
@@ -148,17 +139,15 @@ def cover_sizes(variant: ImageVariant, width_vw: int | Fraction, box_aspect: Fra
 
 
 def album_card_spans(count: int) -> list[int]:
-    """Grid column span of each of `count` album cards, so every row fills all 12 columns."""
+    """Grid column span of each of `count` album cards, so every row fills all 12 columns.
+
+    Cards come two to a row; a lone last card fills its row on its own.
+    """
     if count < 0:
         raise ValueError(f"Card count must not be negative, got {count}.")
-    if count == 1:
-        return [GRID_COLUMNS]
     full_rows, left = divmod(count, CARDS_PER_ROW)
-    if left == 1:
-        # A lone last card would fill a whole row; regroup the last 5 cards as 3 + 2.
-        full_rows -= 1
     full_span = GRID_COLUMNS // CARDS_PER_ROW
-    return [full_span] * (full_rows * CARDS_PER_ROW) + list(LAST_ROW_SPANS.get(left, ()))
+    return [full_span] * (full_rows * CARDS_PER_ROW) + ([GRID_COLUMNS] if left else [])
 
 
 def card_aspect(span: int) -> Fraction:
@@ -166,7 +155,7 @@ def card_aspect(span: int) -> Fraction:
 
     site.css gives every card frame the same height; this ratio is close enough for `sizes`.
     """
-    return Fraction(4, 5) * span / (GRID_COLUMNS // CARDS_PER_ROW)
+    return CARD_FRAME_ASPECT * span / (GRID_COLUMNS // CARDS_PER_ROW)
 
 
 def photo_count(count: int) -> str:
@@ -174,24 +163,16 @@ def photo_count(count: int) -> str:
     return f"{count} photo{'' if count == 1 else 's'}"
 
 
-def mosaic_shapes(count: int) -> list[str]:
-    """Tile shape for each of `count` photos, filling whole 4x2 blocks of the mosaic."""
-    if count < 0:
-        raise ValueError(f"Photo count must not be negative, got {count}.")
-    full_groups, remainder = divmod(count, MOSAIC_GROUP_SIZE)
-    shapes = [shape for g in range(full_groups) for shape in MOSAIC_GROUPS[g % 2]]
-    if remainder:
-        shapes.extend(MOSAIC_REMAINDERS[remainder][full_groups % 2])
-    return shapes
+def justified_sizes(variant: ImageVariant) -> str:
+    """`sizes` value for a photo in a justified row; full width on phones.
 
-
-def mosaic_sizes(variant: ImageVariant, shape: str) -> str:
-    """`sizes` value for a photo cropped to fill a `shape` tile; full width on phones."""
-    try:
-        tile_width_vw, tile_aspect = MOSAIC_TILES[shape]
-    except KeyError:
-        raise ValueError(f"Unknown mosaic shape {shape!r}.") from None
-    return cover_sizes(variant, tile_width_vw, Fraction(tile_aspect))
+    A row stretches up to about twice its base height to fill the width, so the tile is at
+    most twice as wide as at ROW_HEIGHT_VW, and never wider than the viewport.
+    """
+    # Fraction keeps exact multiples exact; floats can push them just past an integer.
+    ratio = Fraction(variant.width, variant.height)
+    width_vw = min(100, math.ceil(ratio * ROW_HEIGHT_VW * 2))
+    return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) 100vw, {width_vw}vw"
 
 
 def next_album_index(index: int, count: int) -> int | None:
@@ -476,12 +457,12 @@ def _album_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
                 photo,
                 base_path,
                 fallback=photo.display,
-                sizes_value=mosaic_sizes(photo.display, shape),
+                sizes_value=justified_sizes(photo.display),
             ),
-            "shape": shape,
+            "ratio": f"{photo.display.width / photo.display.height:.4f}",
             "href": image_url(base_path, photo.display.jpeg_name),
         }
-        for photo, shape in zip(album.photos, mosaic_shapes(len(album.photos)), strict=True)
+        for photo in album.photos
     ]
     return {"title": album.title, "count": photo_count(len(album.photos)), "photos": photos}
 

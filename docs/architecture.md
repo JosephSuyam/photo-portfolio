@@ -38,11 +38,12 @@ Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--
 ```
 dist/
   index.html, work/index.html   album index: "Work", feature card, grid of album cards
-  <slug>/index.html             album page: title, photo count, mosaic, lightbox, Previous/Next pager
+  <slug>/index.html             album page: title, photo count, justified rows, lightbox, Previous/Next pager
   about/index.html              About page (only with a usable about.json)
   contact/index.html            Contact page (only with a usable contact.json)
   images/<hash>.webp|.jpg       thumbnails (600px wide) and display images (2000px long edge)
-  static/                       site.css and compiled JavaScript (theme.js, album-preview.js, lightbox.js)
+  static/                       site.css, compiled JavaScript (theme.js, album-preview.js, lightbox.js)
+  static/fonts/                 bodoni-moda-latin.woff2 and its licence, OFL.txt
   .reel-build                   marker: this directory was written by `reel build`
 ```
 
@@ -66,7 +67,24 @@ an in-memory fake in `tests/fixtures/fake_drive.py`.
 
 - `base.html`: header (site title; "Work", "About", "Contact" links, the last two only when
   that page exists; theme toggle) and a centered footer (site title, © build year). The
-  header scrolls with the page. The footer stays at the bottom of short pages.
+  header is a centered column: the site title in Bodoni over a spaced uppercase menu, with
+  the theme toggle at its top right. It scrolls with the page. The footer stays at the
+  bottom of short pages.
+- **Type**: headlines (site title, page and album headings, card and feature titles, the
+  About lede, the Contact email, pager titles) use `--display`; body text uses `--sans`
+  (Helvetica Neue, Helvetica, Arial).
+
+  ```css
+  --display: "Bodoni Moda", "Bodoni MT", Didot, Georgia, serif;
+  ```
+
+  Bodoni Moda (latin subset, variable weight 400-900) is self-hosted: `src/reel/static/fonts/`
+  is copied with the rest of `static/` into `dist/static/fonts/`, and `site.css` loads it
+  with `@font-face` from the relative URL `fonts/bodoni-moda-latin.woff2`, so it works under
+  a base path such as `/portfolio/`. `font-display: swap` shows the fallback until it loads.
+  No font CDN is called at page-view time. The font came from the Google Fonts API
+  (fonts.gstatic.com) and is licensed under the SIL Open Font License 1.1 (`OFL.txt` beside
+  it, from github.com/google/fonts, `ofl/bodonimoda`).
 - **Theme**: light by default. Dark tokens apply when `<html data-theme="dark">` is set, or
   when the OS prefers dark and `data-theme` isn't `"light"` (`site.css`). `theme.ts` unhides
   the toggle. A click flips the current effective theme, sets `data-theme`, and stores it in
@@ -80,8 +98,11 @@ an in-memory fake in `tests/fixtures/fake_drive.py`.
   applies the stored theme before first paint. The toggle and the inline script are rendered
   only when the build has scripts. Without JavaScript the OS setting applies and the toggle
   stays hidden.
-- **Phones** (<= 767px): one column on every page. When the header doesn't fit on one line,
-  the nav wraps onto its own row below the site title; the title itself never breaks.
+- **Colours**: light is white (`--bg #ffffff`, `--fg #1a1a1a`), dark is black (`--bg #000000`,
+  `--fg #f2f2f2`). Text set on photos (feature and cards) is always white over a dark
+  gradient, in both themes.
+- **Phones** (<= 767px): one column on every page. The header stays a centered column with
+  a smaller title; a title too long for the screen wraps instead of overflowing.
 
 ## About and Contact
 
@@ -91,38 +112,44 @@ keys ignored, strings stripped, no type coercion). Validation warnings name the 
 (`details.1.label`) but never echo the file's contents. All Drive text is autoescaped; only
 `http(s)://` and email values become links.
 
-- **About**: "About" heading, the lede in large serif, then the paragraphs in a narrow
-  column. With a Contact page it ends with a "Commissions and print enquiries: Contact" link.
-- **Contact**: "Contact" heading, the first email as a large `mailto:` link, then the other
-  entries (label above value) in as many columns of at least 220px as fit (about four on a
-  laptop screen; one on phones).
+Both pages are a centered column (max 640px).
+
+- **About**: "About" heading, the lede centered in large Bodoni, then the paragraphs. With a
+  Contact page it ends with a centered "Commissions and print enquiries: Contact" link.
+- **Contact**: "Contact" heading, the first email as a large, underlined, centered `mailto:`
+  link, then the other entries (label above value) in a centered row that wraps.
 - **Form**: only when `CONTACT_FORM_URL` is set ([Setup](setup.md#contact-form-optional)).
   A plain HTML POST of `name`, `email`, `message`, and a visually hidden honeypot `_gotcha`
   straight to the form service; no JavaScript.
 
 ## Album index
 
-- "Work" heading and "N albums · M photographs" (singular for 1).
-- The first album, in manifest (Drive) order, gets a feature card labelled "Latest album":
-  a 16:9 cover, 66vw wide on desktop (4:5 with the text below on phones). With one album the
-  feature card is the only card. With none, there is no feature card and no grid.
-- The other albums go into a 12-column grid. `album_card_spans()` in `build.py` gives each
-  card a column span so that every row is full:
+- "Work" heading and "N albums · M photographs" (singular for 1), both centered.
+- The first album, in manifest (Drive) order, gets a full-bleed feature: its cover across
+  the whole viewport width at 21:9 (4:5 on phones), with "Latest album", the title, and the
+  photo count overlaid bottom-left in white. With one album the feature is all there is.
+  With none, there is no feature and no grid.
+- The other albums go edge to edge (no page gutter) into a 12-column grid with 4px gaps,
+  two cards per row. `album_card_spans()` in `build.py` gives each card a column span:
 
   ```
-  full rows         4 cards, span 3 each
-  1 card in total   [12]
-  2 left            [6, 6]
-  3 left            [4, 4, 4]
-  1 left            the last 5 cards become [4, 4, 4] + [6, 6]
-  e.g. 6 cards      [3, 3, 3, 3, 6, 6]
+  0 cards           []
+  1 card            [12]
+  even count        [6, 6, ...]
+  odd count         [6] * (n - 1) + [12]   e.g. 3 -> [6, 6, 12], 5 -> [6, 6, 6, 6, 12]
   ```
 
-  `site.css` gives every card frame the same height (a 4:5 frame in a row of four, via
-  container units); `card_aspect()` approximates each span's frame shape for `sizes`
-  (4:5 for span 3, 16:15 for 4, 8:5 for 6, 16:5 for 12). `cover_sizes()` gives the `sizes` value for the feature and the cards (the
-  mosaic uses it too). The `FEATURE_*`, `GRID_COLUMNS`, `CARDS_PER_ROW`, and
-  `LAST_ROW_SPANS` constants must stay in sync with `site.css`.
+  A negative count raises `ValueError`. Every frame is as tall as a 3:2 frame in a row of
+  two (via container units), so a lone last card is 3:1. `card_aspect(span)` is
+  `3/2 * span / 6` (3:2 for span 6, 3:1 for 12) and feeds `cover_sizes()`, which gives the
+  `sizes` value for the feature and the cards. Phones get one column of 3:2 cards (spans
+  ignored).
+- Each card's title (Bodoni) and photo count are overlaid bottom-left in white on a dark
+  gradient. With a mouse or pen, hovering a card zooms its photo to 1.03 over 0.6 s; not
+  with `prefers-reduced-motion: reduce`.
+- `FEATURE_WIDTH_VW = 100`, `FEATURE_ASPECT = 21/9`, `GRID_COLUMNS = 12`,
+  `CARDS_PER_ROW = 2`, and `CARD_FRAME_ASPECT = 3/2` in `build.py` must stay in sync with
+  `site.css`.
 - **Preview**: `album-preview.ts` shows a card's album in the feature card (cover, title,
   count, link, and the cover's own feature `sizes` from `data-feature-sizes`) when a mouse
   or pen hovers it or the keyboard focuses it, and hides "Latest album" while it does. Taps
@@ -133,28 +160,30 @@ keys ignored, strings stripped, no type coercion). Validation warnings name the 
 
 ## Album page
 
-- **Mosaic**: `mosaic_shapes()` in `build.py` gives each photo a tile shape on a 4-column grid
-  of square cells: `small` (1x1), `wide` (2x1), `big` (2x2), `full` (4x2). Each group of 4
-  photos fills a 4x2 block, with the big tile alternating sides:
+- **Heading**: the album title (Bodoni) and photo count, centered.
+- **Justified rows**: photos flow in rows of equal height that fill the width, each at its
+  own aspect ratio, so nothing is cropped. Each `li.tile` carries its ratio (display width /
+  height, 4 decimals):
 
-  ```
-  group 1, 3, ...   [big, small, small, wide]
-  group 2, 4, ...   [wide, big, small, small]
-  leftover 1        [full]
-  leftover 2        [big, big]
-  leftover 3        [big, wide, wide] after 0, 2, 4, ... groups; else [wide, big, wide]
+  ```html
+  <li class="tile" style="--ratio: 1.5000">   <!-- a 3000x2000 photo -->
   ```
 
-  So the mosaic never has holes. Tiles crop with `object-fit: cover`; `mosaic_sizes()` picks
-  the `sizes` value from the shape and the photo's aspect ratio. The `MOSAIC_*` constants in
-  `build.py` and the grid in `site.css` must be kept in sync.
-- **Phones** (<= 767px): one column, photos uncropped at their natural aspect ratio.
+  In `site.css` a tile's flex basis is `ratio * 28vw` (a row is about 28vw tall before it
+  stretches) and it grows in proportion to its ratio; a spacer after the last tile keeps
+  the last row from stretching. `ROW_HEIGHT_VW = 28` in `build.py` must match.
+- **`sizes`**: `justified_sizes()` assumes a row stretches to at most twice its base
+  height: `min(100, ceil(ratio * 28 * 2))vw` on desktop, `100vw` on phones. For example
+  3000x2000 -> 84vw, 1000x1000 -> 56vw, 2000x864 -> 100vw, 1080x1929 -> 32vw.
+- Tiles fade in, and zoom on hover (mouse or pen) or keyboard focus; neither with
+  `prefers-reduced-motion: reduce`.
+- **Phones** (<= 767px): one column, each photo full width at its own ratio.
 - **Lightbox**: each tile links to its display JPEG. `lightbox.ts` turns a plain click into a
   `<dialog>` viewer (prev/next buttons, arrow keys, swipe, Escape/close/backdrop to close,
   "n / total" counter). The dialog is rendered only when the build has scripts; without
   JavaScript the link opens the JPEG. All compiled scripts load on every page and do nothing
   where their elements are missing. The lightbox stays dark in both themes.
-- **Pager**: a serif title and photo count above the mosaic. Below it, "← Previous" and
-  "Next →" link to the neighboring albums and wrap around (`previous_album_index()`,
-  `next_album_index()`). With two albums both links go to the other album. With one album
-  there is no pager.
+- **Pager**: below the photos, "← Previous" and "Next →" (album titles in Bodoni, side by
+  side; stacked on phones) link to the neighboring albums and wrap around
+  (`previous_album_index()`, `next_album_index()`). With two albums both links go to the
+  other album. With one album there is no pager.
