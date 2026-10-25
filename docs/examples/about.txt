@@ -1,0 +1,7 @@
+Placeholder lede: one sentence about what you photograph, shown large at the top of the About page.
+
+I'm a photographer based in Example City, working on portraits, travel and editorial commissions. Replace this paragraph with a short introduction in your own words.
+
+Second body paragraph: where you trained or how you started, the kind of light you look for, and who you have worked with. Leave an empty line between paragraphs; line breaks inside a paragraph are joined into one line.
+
+Third body paragraph: what you are working on now, and the kind of projects you would like to hear about.

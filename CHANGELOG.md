@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- About and Contact pages (`/about/`, `/contact/`) from optional `about.txt` and
+  `contact.txt` files in the Drive root (samples in `docs/examples/`). About: a large lede,
+  then paragraphs. Contact: the first email shown large, then labelled entries; `http(s)://`
+  values and email addresses become links. A missing or empty file leaves out the page and
+  its nav link. Album folders named "About" or "Contact" now get `about-2` / `contact-2`.
+- Optional `CONTACT_FORM_URL` (https only) adds a "Send a message" form that posts to a form
+  service such as Formspree. Unset, the Contact page shows links only.
+- Header nav: "Work", then "About" and "Contact" when those pages exist. On phones the nav
+  wraps below the site title instead of the title breaking. The footer stays at the bottom
+  of short pages.
 - "Editorial Light" redesign of the whole site: a light page with serif headlines. Dark mode
   follows the OS setting, or a header toggle that is remembered in this browser and applied
   before the page paints. Without JavaScript the OS setting applies and the toggle is hidden.
