@@ -38,6 +38,19 @@
   color-scheme: dark;
 }
 
+/* The theme tokens are registered as colours so they can be animated. A toggle click adds
+   .theme-transition (theme.ts) and the tokens cross-fade on the root; everything that uses
+   them follows, with no per-element transitions. Loads and OS changes switch instantly.
+   Keep the duration in sync with THEME_TRANSITION_MS in theme.ts. */
+@property --bg { syntax: "<color>"; inherits: true; initial-value: #f7f6f3; }
+@property --fg { syntax: "<color>"; inherits: true; initial-value: #141414; }
+@property --muted { syntax: "<color>"; inherits: true; initial-value: #6e6e6e; }
+@property --line { syntax: "<color>"; inherits: true; initial-value: #e2e0db; }
+
+:root.theme-transition {
+  transition: --bg 1.5s ease, --fg 1.5s ease, --muted 1.5s ease, --line 1.5s ease;
+}
+
 * { box-sizing: border-box; }
 
 /* A column flexbox keeps the footer at the bottom of short pages. */
@@ -518,6 +531,7 @@ html:has(.lightbox[open]) { overflow: hidden; }
 .lightbox-next { right: 12px; top: 50%; transform: translateY(-50%); }
 
 @media (prefers-reduced-motion: reduce) {
+  :root.theme-transition { transition: none; }
   .tile { animation: none; }
   .tile img,
   .feature-frame img,

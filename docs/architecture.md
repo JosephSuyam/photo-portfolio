@@ -70,9 +70,16 @@ an in-memory fake in `tests/fixtures/fake_drive.py`.
 - **Theme**: light by default. Dark tokens apply when `<html data-theme="dark">` is set, or
   when the OS prefers dark and `data-theme` isn't `"light"` (`site.css`). `theme.ts` unhides
   the toggle. A click flips the current effective theme, sets `data-theme`, and stores it in
-  `localStorage["reel-theme"]`. A small inline script in `<head>` applies the stored theme
-  before first paint. The toggle and the inline script are rendered only when the build has
-  scripts. Without JavaScript the OS setting applies and the toggle stays hidden.
+  `localStorage["reel-theme"]`. Before setting it, the click adds `theme-transition` to
+  `<html>` for 1.5 s (`THEME_TRANSITION_MS`, kept in sync with `site.css`; another click
+  restarts the timer). The colour tokens (`--bg`, `--fg`, `--muted`, `--line`) are registered
+  with `@property`, so that class cross-fades them on the root alone and everything using
+  them follows; per-element colour transitions would restart every frame under an animating
+  parent and lag. Page loads and OS changes switch instantly, and with
+  `prefers-reduced-motion: reduce` the click does too. A small inline script in `<head>`
+  applies the stored theme before first paint. The toggle and the inline script are rendered
+  only when the build has scripts. Without JavaScript the OS setting applies and the toggle
+  stays hidden.
 - **Phones** (<= 767px): one column on every page. When the header doesn't fit on one line,
   the nav wraps onto its own row below the site title; the title itself never breaks.
 

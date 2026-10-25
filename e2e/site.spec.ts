@@ -123,6 +123,66 @@ function themeToggle(page: Page): Locator {
   return page.locator(".site-nav button.theme-toggle");
 }
 
+const THEME_TRANSITION_CLASS = "theme-transition";
+const HAS_THEME_TRANSITION_CLASS = new RegExp(`(^|\\s)${THEME_TRANSITION_CLASS}(\\s|$)`);
+/** The fade lasts 1.5 s; the class must be gone well within this. */
+const THEME_TRANSITION_SETTLE_MS = 4_000;
+
+type ThemeTransitionEvent = { kind: "click" | "added" | "removed"; at: number };
+
+/** Logs toggle clicks and every add/remove of the transition class on `<html>`, in page time. */
+async function recordThemeTransitions(page: Page): Promise<void> {
+  await page.evaluate((className) => {
+    const log: ThemeTransitionEvent[] = [];
+    (window as unknown as { themeTransitionLog: ThemeTransitionEvent[] }).themeTransitionLog = log;
+    const root = document.documentElement;
+    let present = root.classList.contains(className);
+    new MutationObserver(() => {
+      const now = root.classList.contains(className);
+      if (now !== present) log.push({ kind: now ? "added" : "removed", at: performance.now() });
+      present = now;
+    }).observe(root, { attributes: true, attributeFilter: ["class"] });
+    document.addEventListener(
+      "click",
+      (event) => {
+        if ((event.target as Element).closest(".theme-toggle")) log.push({ kind: "click", at: performance.now() });
+      },
+      true,
+    );
+  }, THEME_TRANSITION_CLASS);
+}
+
+function themeTransitionLog(page: Page): Promise<ThemeTransitionEvent[]> {
+  return page.evaluate(() => (window as unknown as { themeTransitionLog: ThemeTransitionEvent[] }).themeTransitionLog);
+}
+
+/** Only the adds and removes of the transition class, without the clicks. */
+async function themeTransitionClassChanges(page: Page): Promise<ThemeTransitionEvent[]> {
+  return (await themeTransitionLog(page)).filter((event) => event.kind !== "click");
+}
+
+/** Clicks the toggle in the page itself, `gapMs` apart, so slow test actions cannot stretch the gap. */
+function clickToggleTwiceInPage(page: Page, gapMs: number): Promise<void> {
+  return themeToggle(page).evaluate(async (button: HTMLButtonElement, gap) => {
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, gap));
+    button.click();
+  }, gapMs);
+}
+
+/** Whether `color` is an opaque `rgb()` with every channel strictly between dark and light. */
+function isBetweenThemeBackgrounds(color: string): boolean {
+  const match = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(color);
+  if (!match) return false;
+  const dark = [15, 15, 15];
+  const light = [247, 246, 243];
+  return match.slice(1).every((channel, index) => Number(channel) > dark[index] && Number(channel) < light[index]);
+}
+
+function bodyBackground(page: Page): Promise<string> {
+  return page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
+}
+
 function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 }
@@ -711,6 +771,209 @@ test.describe("theme with a light OS setting", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await page.reload();
     await expect(themeToggle(page)).toHaveAttribute("aria-label", "Switch to light mode");
+  });
+});
+
+test.describe("theme transition", () => {
+  test.use({ colorScheme: "light" });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/work/");
+    await recordThemeTransitions(page);
+  });
+
+  test("clicking the toggle adds the transition class", async ({ page }) => {
+    await themeToggle(page).click();
+    await expect(page.locator("html")).toHaveClass(HAS_THEME_TRANSITION_CLASS);
+  });
+
+  test("clicking the toggle fades the colour tokens on the root over 1.5 s", async ({ page }) => {
+    const rootTransition = await themeToggle(page).evaluate((button: HTMLButtonElement) => {
+      button.click();
+      const style = getComputedStyle(document.documentElement);
+      const properties = style.transitionProperty.split(",").map((part) => part.trim());
+      const durations = style.transitionDuration.split(",").map((part) => part.trim());
+      return ["--bg", "--fg"].map((token) => ({ token, duration: durations[properties.indexOf(token)] ?? null }));
+    });
+    expect(rootTransition).toEqual([
+      { token: "--bg", duration: "1.5s" },
+      { token: "--fg", duration: "1.5s" },
+    ]);
+  });
+
+  test("only the root runs a CSS transition mid-fade", async ({ page }) => {
+    const targets = await themeToggle(page).evaluate(async (button: HTMLButtonElement) => {
+      button.click();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return {
+        fading: document.documentElement.classList.contains("theme-transition"),
+        others: document
+          .getAnimations()
+          .filter((animation) => animation instanceof CSSTransition)
+          .map((animation) => (animation.effect as KeyframeEffect).target)
+          .filter((target) => target !== document.documentElement)
+          .map((target) => (target instanceof Element ? `${target.tagName}.${target.getAttribute("class") ?? ""}` : String(target))),
+      };
+    });
+    expect(targets).toEqual({ fading: true, others: [] });
+  });
+
+  test("nested text reaches its final colour by the end of the fade", async ({ page }) => {
+    const selectors = [".site-title", ".site-nav a", ".theme-toggle", ".footer-title", ".album-count"];
+    const sample = await page.evaluate(async (selectors) => {
+      const colours = () => selectors.map((selector) => getComputedStyle(document.querySelector(selector)!).color);
+      document.querySelector<HTMLButtonElement>(".site-nav button.theme-toggle")!.click();
+      // The fade lasts 1500 ms and the class is removed at 1600 ms; sample in between.
+      await new Promise((resolve) => setTimeout(resolve, 1_520));
+      const atEnd = colours();
+      const fading = document.documentElement.classList.contains("theme-transition");
+      return { fading, atEnd };
+    }, selectors);
+    const channels = (colour: string) => (/^rgb\((\d+), (\d+), (\d+)\)$/.exec(colour) ?? []).slice(1).map(Number);
+    const finalChannels = [241, 241, 241, 241, 154].map((value) => [value, value, value]);
+    const farthest = Math.max(
+      ...sample.atEnd.flatMap((colour, index) => {
+        const actual = channels(colour);
+        return actual.length === 3 ? actual.map((value, channel) => Math.abs(value - finalChannels[index][channel])) : [Infinity];
+      }),
+    );
+    expect({ fading: sample.fading, withinFewUnits: farthest <= 4 }, `colours ${sample.atEnd.join(" | ")}`).toEqual({
+      fading: true,
+      withinFewUnits: true,
+    });
+  });
+
+  test("background is between the two colours mid-fade", async ({ page }) => {
+    await themeToggle(page).click();
+    await expect
+      .poll(async () => isBetweenThemeBackgrounds(await bodyBackground(page)), {
+        intervals: [50],
+        timeout: 1_500,
+      })
+      .toBe(true);
+  });
+
+  test("transition class is removed after the fade", async ({ page }) => {
+    await themeToggle(page).click();
+    await expect(page.locator("html")).toHaveClass(HAS_THEME_TRANSITION_CLASS);
+    await expect(page.locator("html")).not.toHaveClass(HAS_THEME_TRANSITION_CLASS, {
+      timeout: THEME_TRANSITION_SETTLE_MS,
+    });
+  });
+
+  test("transition class lasts a little over 1.5 s", async ({ page }) => {
+    await themeToggle(page).click();
+    await expect
+      .poll(async () => (await themeTransitionClassChanges(page)).map((event) => event.kind), {
+        timeout: THEME_TRANSITION_SETTLE_MS,
+      })
+      .toEqual(["added", "removed"]);
+    const [added, removed] = await themeTransitionClassChanges(page);
+    const lasted = removed.at - added.at;
+    expect(lasted >= 1_450 && lasted <= 3_000, `class lasted ${lasted} ms`).toBe(true);
+  });
+
+  test("background reaches dark after the fade", async ({ page }) => {
+    await themeToggle(page).click();
+    await expect(page.locator("html")).not.toHaveClass(HAS_THEME_TRANSITION_CLASS, {
+      timeout: THEME_TRANSITION_SETTLE_MS,
+    });
+    expect(await bodyBackground(page)).toBe(DARK_BACKGROUND);
+  });
+
+  test("page loads without the transition class", async ({ page }) => {
+    expect((await page.locator("html").getAttribute("class")) ?? "").not.toMatch(HAS_THEME_TRANSITION_CLASS);
+  });
+
+  test("OS switch to dark adds no transition class", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("body")).toHaveCSS("background-color", DARK_BACKGROUND);
+    expect(await themeTransitionClassChanges(page)).toEqual([]);
+  });
+
+  test("rapid double click ends on light", async ({ page }) => {
+    await themeToggle(page).click();
+    await themeToggle(page).click();
+    await expect(page.locator("html")).not.toHaveClass(HAS_THEME_TRANSITION_CLASS, {
+      timeout: THEME_TRANSITION_SETTLE_MS,
+    });
+    expect(await bodyBackground(page)).toBe(LIGHT_BACKGROUND);
+  });
+
+  test("rapid double click keeps the class until the fade ends", async ({ page }) => {
+    await clickToggleTwiceInPage(page, 0);
+    await expect
+      .poll(async () => (await themeTransitionClassChanges(page)).some((event) => event.kind === "removed"), {
+        timeout: THEME_TRANSITION_SETTLE_MS,
+      })
+      .toBe(true);
+    const log = await themeTransitionLog(page);
+    const lastClick = log.filter((event) => event.kind === "click").at(-1)!;
+    const classChanges = log.filter((event) => event.kind !== "click");
+    expect({
+      changes: classChanges.map((event) => event.kind),
+      removedAfterLastClick: classChanges.at(-1)!.at > lastClick.at,
+    }).toEqual({ changes: ["added", "removed"], removedAfterLastClick: true });
+  });
+
+  test("second click restarts the 1.5 s timer", async ({ page }) => {
+    // Far enough into the first fade that a timer which did not restart would end ~1 s after the second click.
+    await clickToggleTwiceInPage(page, 500);
+    await expect
+      .poll(async () => (await themeTransitionClassChanges(page)).some((event) => event.kind === "removed"), {
+        timeout: THEME_TRANSITION_SETTLE_MS,
+      })
+      .toBe(true);
+    const log = await themeTransitionLog(page);
+    const lastClick = log.filter((event) => event.kind === "click").at(-1)!;
+    const classChanges = log.filter((event) => event.kind !== "click");
+    const afterLastClick = classChanges.at(-1)!.at - lastClick.at;
+    expect(
+      { changes: classChanges.map((event) => event.kind), restarted: afterLastClick >= 1_450 },
+      `class removed ${afterLastClick} ms after the last click`,
+    ).toEqual({ changes: ["added", "removed"], restarted: true });
+  });
+
+  test("photos keep their own transition during the fade", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const duringFade = await page.evaluate(() => {
+      document.querySelector<HTMLButtonElement>(".site-nav button.theme-toggle")!.click();
+      return {
+        fading: document.documentElement.classList.contains("theme-transition"),
+        photoTransition: getComputedStyle(document.querySelector(".tile img")!).transitionProperty,
+      };
+    });
+    expect(duringFade).toEqual({ fading: true, photoTransition: "transform" });
+  });
+
+  test.describe("with a stored dark choice", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.evaluate(() => localStorage.setItem("reel-theme", "dark"));
+      await page.reload();
+    });
+
+    test("page loads dark without the transition class", async ({ page }) => {
+      expect((await page.locator("html").getAttribute("class")) ?? "").not.toMatch(HAS_THEME_TRANSITION_CLASS);
+    });
+
+    test("background is dark as soon as the page loads", async ({ page }) => {
+      expect(await bodyBackground(page)).toBe(DARK_BACKGROUND);
+    });
+  });
+
+  test.describe("with reduced motion", () => {
+    test.use({ reducedMotion: "reduce" });
+
+    test("clicking the toggle switches to dark instantly", async ({ page }) => {
+      await themeToggle(page).click();
+      expect(await bodyBackground(page)).toBe(DARK_BACKGROUND);
+    });
+
+    test("clicking the toggle never adds the transition class", async ({ page }) => {
+      await themeToggle(page).click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+      expect(await themeTransitionClassChanges(page)).toEqual([]);
+    });
   });
 });
 

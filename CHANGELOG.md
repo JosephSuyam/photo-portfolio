@@ -14,6 +14,8 @@
 - Header nav: "Work", then "About" and "Contact" when those pages exist. On phones the nav
   wraps below the site title instead of the title breaking. The footer stays at the bottom
   of short pages.
+- Clicking the theme toggle cross-fades the colours over 1.5 s. Page loads and OS theme
+  changes still switch instantly, and so does the toggle when reduced motion is set.
 - "Editorial Light" redesign of the whole site: a light page with serif headlines. Dark mode
   follows the OS setting, or a header toggle that is remembered in this browser and applied
   before the page paints. Without JavaScript the OS setting applies and the toggle is hidden.
