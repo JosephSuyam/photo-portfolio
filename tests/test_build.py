@@ -1,5 +1,7 @@
 import json
 import logging
+import math
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,14 +25,27 @@ if TYPE_CHECKING:
 PAYLOAD = "<script>x</script>"
 ESCAPED = "&lt;script&gt;x&lt;/script&gt;"
 
+# Shape of one entry in `album.photos` as produced by `_album_context` in build.py.
+_PHOTO_CONTEXT = {
+    "src": "/images/d.jpg",
+    "webp_srcset": "/images/t.webp 600w, /images/d.webp 2000w",
+    "jpeg_srcset": "/images/t.jpg 600w, /images/d.jpg 2000w",
+    "sizes": "(max-width: 767px) 100vw, 100vw",
+    "width": 2000,
+    "height": 1000,
+    "shape": "full",
+    "href": "/images/d.jpg",
+}
+
 
 def test_album_template_untrusted_title_escaped() -> None:
     template = make_environment().get_template("album.html")
     html = template.render(
         site_title="Site",
         base_path="/",
-        album={"title": PAYLOAD, "photos": []},
-        next_album=None,
+        script_names=["site.js"],
+        album={"title": PAYLOAD, "photos": [_PHOTO_CONTEXT]},
+        next_album={"title": PAYLOAD, "slug": "x"},
     )
     assert ESCAPED in html and PAYLOAD not in html
 
@@ -594,3 +609,244 @@ def test_base_path_from_url_already_encoded_path_not_double_encoded() -> None:
     from reel.build import base_path_from_url
 
     assert base_path_from_url("https://x.com/my%20portfolio/") == "/my%20portfolio/"
+
+
+# mosaic_shapes
+
+_SHAPE_SPANS = {"small": (1, 1), "wide": (2, 1), "big": (2, 2), "full": (4, 2)}
+_GRID_COLUMNS = 4
+
+
+def _auto_place(shapes: list[str]) -> list[set[tuple[int, int]]]:
+    """Cells (row, column) each shape occupies under CSS grid sparse auto-placement."""
+    occupied: set[tuple[int, int]] = set()
+    placements: list[set[tuple[int, int]]] = []
+    row, column = 0, 0
+    for shape in shapes:
+        col_span, row_span = _SHAPE_SPANS[shape]
+        while True:
+            cells = {(row + r, column + c) for r in range(row_span) for c in range(col_span)}
+            if column + col_span <= _GRID_COLUMNS and not cells & occupied:
+                break
+            column += 1
+            if column + col_span > _GRID_COLUMNS:
+                row, column = row + 1, 0
+        occupied |= cells
+        placements.append(cells)
+        column += col_span
+    return placements
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [
+        (0, []),
+        (1, ["full"]),
+        (2, ["big", "big"]),
+        (3, ["big", "wide", "wide"]),
+        (4, ["big", "small", "small", "wide"]),
+        (5, ["big", "small", "small", "wide", "full"]),
+        (7, ["big", "small", "small", "wide", "wide", "big", "wide"]),
+        (8, ["big", "small", "small", "wide", "wide", "big", "small", "small"]),
+    ],
+)
+def test_mosaic_shapes_count_returns_expected_shapes(count: int, expected: list[str]) -> None:
+    from reel.build import mosaic_shapes
+
+    assert mosaic_shapes(count) == expected
+
+
+def test_mosaic_shapes_remainder_three_after_odd_groups_puts_big_in_middle() -> None:
+    from reel.build import mosaic_shapes
+
+    assert mosaic_shapes(15)[12:] == ["wide", "big", "wide"]
+
+
+def test_mosaic_shapes_remainder_three_after_even_groups_puts_big_first() -> None:
+    from reel.build import mosaic_shapes
+
+    assert mosaic_shapes(19)[16:] == ["big", "wide", "wide"]
+
+
+@pytest.mark.parametrize("count", range(21))
+def test_mosaic_shapes_tile_four_column_grid_without_holes(count: int) -> None:
+    from reel.build import mosaic_shapes
+
+    cells = set().union(*_auto_place(mosaic_shapes(count)))
+    rows = 2 * math.ceil(count / 4)
+    assert cells == {(r, c) for r in range(rows) for c in range(_GRID_COLUMNS)}
+
+
+@pytest.mark.parametrize("count", range(1, 21))
+def test_mosaic_shapes_each_group_of_four_fills_its_own_block(count: int) -> None:
+    from reel.build import mosaic_shapes
+
+    placements = _auto_place(mosaic_shapes(count))
+    outside = [
+        index
+        for index, cells in enumerate(placements)
+        if {row // 2 for row, _ in cells} != {index // 4}
+    ]
+    assert outside == []
+
+
+def test_mosaic_shapes_negative_count_raises_value_error() -> None:
+    from reel.build import mosaic_shapes
+
+    with pytest.raises(ValueError):
+        mosaic_shapes(-1)
+
+
+# mosaic_sizes
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "shape", "desktop"),
+    [
+        (1500, 1000, "small", "38vw"),
+        (1000, 2000, "small", "25vw"),
+        (3000, 1000, "wide", "75vw"),
+        (1000, 1000, "full", "100vw"),
+        (2000, 1000, "big", "100vw"),
+        (1000, 2000, "big", "50vw"),
+        (1000, 1000, "wide", "50vw"),
+        (3000, 1000, "full", "150vw"),
+    ],
+)
+def test_mosaic_sizes_returns_cover_crop_width(
+    width: int, height: int, shape: str, desktop: str
+) -> None:
+    from reel.build import mosaic_sizes
+    from reel.images import ImageVariant
+
+    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=width, height=height)
+    assert mosaic_sizes(variant, shape) == f"(max-width: 767px) 100vw, {desktop}"
+
+
+def test_mosaic_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
+    from reel.build import mosaic_sizes
+    from reel.images import ImageVariant
+
+    # 25 * 1120 / 1000 is exactly 28, but 25 * (1120 / 1000) is 28.000000000000004 in floats.
+    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=1120, height=1000)
+    assert mosaic_sizes(variant, "small") == "(max-width: 767px) 100vw, 28vw"
+
+
+def test_mosaic_sizes_unknown_shape_raises_value_error() -> None:
+    from reel.build import mosaic_sizes
+    from reel.images import ImageVariant
+
+    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=1000, height=1000)
+    with pytest.raises(ValueError):
+        mosaic_sizes(variant, "huge")
+
+
+# build_site: album mosaic and lightbox
+
+
+def _album_of(cache: Path, count: int) -> Album:
+    photos = []
+    for index in range(count):
+        write_original(cache, f"p{index}", color=(index * 40 % 256, 80, 160))
+        photos.append(make_photo(f"p{index}"))
+    return make_album("a", photos, title="Book One")
+
+
+def _tile_shapes(html: str) -> list[str]:
+    return re.findall(r'class="tile tile--(\w+)"', html)
+
+
+def test_build_site_single_photo_album_has_full_tile(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 1)], cache, out)
+    assert _tile_shapes(_read(out / "a" / "index.html")) == ["full"]
+
+
+def test_build_site_four_photo_album_tiles_have_group_shapes(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 4)], cache, out)
+    assert _tile_shapes(_read(out / "a" / "index.html")) == ["big", "small", "small", "wide"]
+
+
+def test_build_site_album_tile_links_display_jpeg_with_base_path(
+    cache: Path, out: Path, tmp_path: Path
+) -> None:
+    source = write_original(cache, "p1", size=(1200, 800))
+    expected = _expected(source, tmp_path / "scratch")
+    _build([make_album("a", [make_photo("p1")])], cache, out, base_path="/portfolio/")
+    html = _read(out / "a" / "index.html")
+    assert f'href="/portfolio/images/{expected.display.jpeg_name}" data-lightbox' in html
+
+
+def test_build_site_album_tile_link_not_thumbnail(cache: Path, out: Path, tmp_path: Path) -> None:
+    source = write_original(cache, "p1", size=(1200, 800))
+    expected = _expected(source, tmp_path / "scratch")
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    assert f'href="/images/{expected.thumbnail.jpeg_name}"' not in _read(out / "a" / "index.html")
+
+
+def test_build_site_album_tile_link_has_position_label(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 3)], cache, out)
+    assert 'aria-label="Open photo 1 of 3"' in _read(out / "a" / "index.html")
+
+
+def test_build_site_album_tile_last_link_label_counts_all_photos(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 3)], cache, out)
+    assert 'aria-label="Open photo 3 of 3"' in _read(out / "a" / "index.html")
+
+
+def test_build_site_album_tile_sizes_follow_shape(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1200, 400))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    # A 3:1 photo in a 2:1 full tile is cropped to 1.5x the 100vw tile width.
+    assert 'sizes="(max-width: 767px) 100vw, 150vw"' in _read(out / "a" / "index.html")
+
+
+def test_build_site_album_page_has_visible_heading(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 1)], cache, out)
+    html = _read(out / "a" / "index.html")
+    assert re.search(r'<h1 class="album-heading">\s*Book One\s*</h1>', html)
+
+
+def test_build_site_album_page_body_has_page_album_class(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    assert '<body class="page-album">' in _read(out / "a" / "index.html")
+
+
+@pytest.mark.parametrize("page", ["index.html", "work/index.html"])
+def test_build_site_index_body_has_no_page_album_class(cache: Path, out: Path, page: str) -> None:
+    _build(_three_albums(cache), cache, out)
+    assert "page-album" not in _read(out / page)
+
+
+def test_build_site_album_page_next_is_labelled_nav(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    assert '<nav class="next-album" aria-label="Next album">' in _read(out / "a" / "index.html")
+
+
+def test_build_site_with_scripts_album_page_has_lightbox(
+    cache: Path, out: Path, tmp_path: Path
+) -> None:
+    _build_with_scripts(cache, out, tmp_path)
+    assert '<dialog class="lightbox"' in _read(out / "a" / "index.html")
+
+
+@pytest.mark.parametrize(
+    "control",
+    [
+        'class="lightbox-image"',
+        'class="lightbox-counter"',
+        'aria-label="Close"',
+        'aria-label="Previous photo"',
+        'aria-label="Next photo"',
+    ],
+)
+def test_build_site_with_scripts_lightbox_has_control(
+    cache: Path, out: Path, tmp_path: Path, control: str
+) -> None:
+    _build_with_scripts(cache, out, tmp_path)
+    html = _read(out / "a" / "index.html")
+    assert control in html[html.index('<dialog class="lightbox"') :]
+
+
+def test_build_site_without_scripts_album_page_has_no_lightbox(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    assert "<dialog" not in _read(out / "a" / "index.html")
