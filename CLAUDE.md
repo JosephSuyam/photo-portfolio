@@ -1,8 +1,8 @@
 # Project Instructions
 
 ## Project
-A photographer portfolio modeled on https://reel.format.com/, generated from a Google Drive folder: root = portfolio, each **subfolder = one album**, each **image = a photo**.
-- Pages: `/` and `/work/` (album index: first album featured, the rest as cover cards), `/<album-slug>/` (title, photo mosaic with lightbox, Previous/Next albums). `/about/` and `/contact/` (from root `about.json` / `contact.json`, omitted when absent; samples in `docs/examples/`). Light/dark theme toggle. Blog, client proofing: out of scope until asked.
+A photographer portfolio, generated from a Google Drive folder: root = portfolio, each **subfolder = one album**, each **image = a photo**.
+- Pages: `/` and `/work/` (album index: first album featured, the rest as cover cards), `/<album-slug>/` (title, justified photo rows with lightbox, Previous/Next albums). `/about/` and `/contact/` (from root `about.json` / `contact.json`, omitted when absent; samples in `docs/examples/`). Light/dark theme toggle. Blog, client proofing: out of scope until asked.
 - Pipeline: `sync` (Drive -> `.cache/` + `manifest.json`) -> `build` (images, Jinja2, compiled TypeScript -> `dist/`) -> `serve`/deploy (static files). Drive is never called at page-view time and Drive links never appear in output (they expire and must not be public).
 - Stack: Python 3.12+ via `uv` (google-api-python-client, google-auth, Pillow, Jinja2, typer, pydantic v2, ruff, mypy, pytest); npm for TypeScript 7 (tsconfig needs `rootDir`) and Playwright (runs on the installed Edge).
 - Layout: `src/reel/` (`drive.py` is the only module that talks to Google; `ts/` site script), `tests/` mirrors it (`FakeDriveClient` in `tests/fixtures/`), `e2e/` Playwright + fixture site (generated images, no Drive), `docs/`.
@@ -10,9 +10,8 @@ A photographer portfolio modeled on https://reel.format.com/, generated from a G
 ## Commands (single source of truth; agents and skills refer here)
 - Install: `uv sync && npm install` | Format: `uv run ruff format .`
 - One test: `uv run pytest -k "<name>"` | `npx playwright test -g "<name>"`
-- Site: `uv run reel sync` / `build` / `serve` (localhost:8000); `reel all` = sync + build
+- Site: `uv run reel sync` / `build` / `serve` (localhost:8000); `reel all` = sync + build; `reel watch` rebuilds on change with live reload
 - Ports: 8000 is the user's preview server (don't take it over or stop it unless asked); Playwright uses 8123.
-- **Full check** (what "done" means): `uv run ruff check . && uv run mypy src && uv run pytest && npm run typecheck && npm run test:e2e`
 
 ## Configuration
 `.env` (never committed; shape in `.env.example`): `GOOGLE_APPLICATION_CREDENTIALS`, `DRIVE_ROOT_FOLDER_ID`, `SITE_TITLE`, `SITE_BASE_URL`, optional `CONTACT_FORM_URL` (https form endpoint; unset = no form). Real env vars override it; VS Code injects `.env` at startup, so restart it after edits. Root folder shared (Viewer) with the service account; scope `drive.readonly`. The path in `SITE_BASE_URL` becomes the site's base path (e.g. `/portfolio/`).

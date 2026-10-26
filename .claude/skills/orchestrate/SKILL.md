@@ -8,15 +8,10 @@ argument-hint: <task in plain words>
 
 Task: $ARGUMENTS
 
-If the task is empty, ask for it. If this session already runs as the `orchestrator` agent
-(`claude --agent orchestrator`), just do the task following your own instructions.
+If the task is empty, ask for it. If this session already runs as the `orchestrator` agent (`claude --agent orchestrator`), just do the task following your own instructions.
 
-Otherwise launch the `orchestrator` agent with the task verbatim, plus anything from this
-conversation it needs (branch, earlier decisions, the user's answers), and tell the user in
-one line that it's running.
+Otherwise launch the `orchestrator` agent with the task verbatim, plus anything from this conversation it needs (branch, earlier decisions, the user's answers), and tell the user in one line that it's running.
 
 When it reports:
-- **Questions at the top:** ask the user (AskUserQuestion with its options), then resume the
-  same orchestrator with SendMessage and the answers. Don't answer for the user.
-- **Done:** relay its summary to the user as is (Result, What changed, How it was verified,
-  Decisions and open items, next step). Don't redo its work or claim checks it didn't report.
+- **Questions at the top:** ask the user (AskUserQuestion with its options), then resume the same orchestrator with SendMessage and the answers. Don't answer for the user.
+- **Done:** relay its summary to the user as is (Result, What changed, How it was verified, Decisions and open items, next step). Don't redo its work or claim checks it didn't report.
