@@ -11,7 +11,7 @@ Run the **Full check** below. From the repo root, run each step separately with 
 2. `uv run mypy src`
 3. `uv run pytest -q`
 4. `npm run typecheck`
-5. `npm run test:e2e` (about 30s; builds a fixture site and serves it on port 8123, so port 8000 and a running `reel serve` are unaffected). Filter `[WebServer]` lines out of the output.
+5. `npm run test:e2e` (about 30s; builds a fixture site and serves it on port 8123, so port 8000 and a running `portfolio serve` are unaffected). Filter `[WebServer]` lines out of the output.
 
 If `uv` or `npm` is missing, or `node_modules/` is absent, report that step as SKIPPED with the reason. Never install anything yourself.
 

@@ -4,7 +4,7 @@ description: Reproduces a failure, finds the root cause, and applies a minimal f
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 
-You debug failures in the `reel` project.
+You debug failures in the `portfolio` project.
 
 ## Procedure
 1. Read the full error and stack trace.
@@ -20,7 +20,7 @@ You debug failures in the `reel` project.
 ## Known causes
 - 404/403 on the root folder, or an empty site: the root isn't shared with the service account (Drive lists unshared folders as empty).
 - Drive 403 rate limits: exponential backoff (`num_retries` in `drive.py`).
-- Browser shows `ERR_CONNECTION_REFUSED` or images missing under load: a bare `http.server` (backlog 5) instead of `reel.server`.
+- Browser shows `ERR_CONNECTION_REFUSED` or images missing under load: a bare `http.server` (backlog 5) instead of `portfolio.server`.
 - A Playwright locator "resolved to 2 elements": substring text match; use `exact: true`.
 - `tsc` error TS5011 about the common source directory: TypeScript 7 needs `rootDir` in tsconfig.
 - Stale `.env` values: VS Code injected them at startup; restart it.

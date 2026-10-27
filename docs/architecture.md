@@ -5,11 +5,11 @@ Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--
 ```
 
 - **sync** (`sync.py`, via `drive.py`): lists albums, photos, and the root `about.json` / `contact.json`, downloads only what changed (`md5Checksum`/`modifiedTime`), and removes cache entries deleted from Drive.
-- **build** (`build.py`, `images.py`, `pages.py`, `scripts.py`): compiles `src/reel/ts/` with the project's local `tsc` into a temporary folder, makes content-hashed thumbnails and display images (WebP + JPEG), then renders Jinja2 templates into `dist/`. Scripts:
+- **build** (`build.py`, `images.py`, `pages.py`, `scripts.py`): compiles `src/portfolio/ts/` with the project's local `tsc` into a temporary folder, makes content-hashed thumbnails and display images (WebP + JPEG), then renders Jinja2 templates into `dist/`. Scripts:
   - `theme.ts`: light/dark toggle in the header
   - `album-preview.ts`: index hover/focus preview in the feature card
   - `lightbox.ts`: album photo viewer
-- **serve**: `dist/` is plain static files. `reel serve` previews them on localhost.
+- **serve**: `dist/` is plain static files. `portfolio serve` previews them on localhost.
 
 ## Sync
 
@@ -33,12 +33,12 @@ dist/
   images/<hash>.webp|.jpg       thumbnails (600px wide) and display images (2000px long edge)
   static/                       site.css, compiled JavaScript (theme.js, album-preview.js, lightbox.js)
   static/fonts/                 bodoni-moda-latin.woff2 and its licence, OFL.txt
-  .reel-build                   marker: this directory was written by `reel build`
+  .portfolio-build                   marker: this directory was written by `portfolio build`
 ```
 
 - Slugs must be lowercase letters and digits with single hyphens, unique, and not `work`, `static`, `images`, `about`, or `contact`; otherwise the build fails.
 - A photo that can't be decoded is skipped with a warning. A page file that is too large, not UTF-8, not valid JSON, or the wrong shape leaves its page out with a warning. A missing original fails the build.
-- The site is built in `.dist.staging/` and swapped in only on success, so a failed build leaves the previous `dist/` as it was. Build refuses to replace a non-empty `dist/` without the `.reel-build` marker.
+- The site is built in `.dist.staging/` and swapped in only on success, so a failed build leaves the previous `dist/` as it was. Build refuses to replace a non-empty `dist/` without the `.portfolio-build` marker.
 - Derived images carry no EXIF or other source metadata (only the ICC color profile).
 - Every build re-processes every photo; caching derived images is a planned optimization.
 
@@ -55,8 +55,8 @@ Drive is never called at page-view time, and Drive links never appear in the out
   --display: "Bodoni Moda", "Bodoni MT", Didot, Georgia, serif;
   ```
 
-  Bodoni Moda (latin subset, variable weight 400-900) is self-hosted: `src/reel/static/fonts/` is copied with the rest of `static/` into `dist/static/fonts/`, and `site.css` loads it with `@font-face` from the relative URL `fonts/bodoni-moda-latin.woff2`, so it works under a base path such as `/portfolio/`. `font-display: swap` shows the fallback until it loads. No font CDN is called at page-view time. The font came from the Google Fonts API (fonts.gstatic.com) and is licensed under the SIL Open Font License 1.1 (`OFL.txt` beside it, from github.com/google/fonts, `ofl/bodonimoda`).
-- **Theme**: light by default. Dark tokens apply when `<html data-theme="dark">` is set, or when the OS prefers dark and `data-theme` isn't `"light"` (`site.css`). `theme.ts` unhides the toggle. A click flips the current effective theme, sets `data-theme`, and stores it in `localStorage["reel-theme"]`. Before setting it, the click adds `theme-transition` to `<html>` for 1.5 s (`THEME_TRANSITION_MS`, kept in sync with `site.css`; another click restarts the timer). The colour tokens (`--bg`, `--fg`, `--muted`, `--line`) are registered with `@property`, so that class cross-fades them on the root alone and everything using them follows; per-element colour transitions would restart every frame under an animating parent and lag. Page loads and OS changes switch instantly, and with `prefers-reduced-motion: reduce` the click does too. A small inline script in `<head>` applies the stored theme before first paint. The toggle and the inline script are rendered only when the build has scripts. Without JavaScript the OS setting applies and the toggle stays hidden.
+  Bodoni Moda (latin subset, variable weight 400-900) is self-hosted: `src/portfolio/static/fonts/` is copied with the rest of `static/` into `dist/static/fonts/`, and `site.css` loads it with `@font-face` from the relative URL `fonts/bodoni-moda-latin.woff2`, so it works under a base path such as `/portfolio/`. `font-display: swap` shows the fallback until it loads. No font CDN is called at page-view time. The font came from the Google Fonts API (fonts.gstatic.com) and is licensed under the SIL Open Font License 1.1 (`OFL.txt` beside it, from github.com/google/fonts, `ofl/bodonimoda`).
+- **Theme**: light by default. Dark tokens apply when `<html data-theme="dark">` is set, or when the OS prefers dark and `data-theme` isn't `"light"` (`site.css`). `theme.ts` unhides the toggle. A click flips the current effective theme, sets `data-theme`, and stores it in `localStorage["portfolio-theme"]`. Before setting it, the click adds `theme-transition` to `<html>` for 1.5 s (`THEME_TRANSITION_MS`, kept in sync with `site.css`; another click restarts the timer). The colour tokens (`--bg`, `--fg`, `--muted`, `--line`) are registered with `@property`, so that class cross-fades them on the root alone and everything using them follows; per-element colour transitions would restart every frame under an animating parent and lag. Page loads and OS changes switch instantly, and with `prefers-reduced-motion: reduce` the click does too. A small inline script in `<head>` applies the stored theme before first paint. The toggle and the inline script are rendered only when the build has scripts. Without JavaScript the OS setting applies and the toggle stays hidden.
 - **Colours**: light is white (`--bg #ffffff`, `--fg #1a1a1a`), dark is black (`--bg #000000`, `--fg #f2f2f2`). Text set on photos (feature and cards) is always white over a dark gradient, in both themes.
 - **Phones** (<= 767px): one column on every page. The header stays a centered column with a smaller title; a title too long for the screen wraps instead of overflowing.
 
