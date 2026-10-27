@@ -1,0 +1,109 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Hourly keeps a private repo well inside the free Actions minutes.
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # workflow_dispatch can target any branch; only main goes to production.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DRIVE_ROOT_FOLDER_ID: ${{ vars.DRIVE_ROOT_FOLDER_ID }}
+      SITE_TITLE: ${{ vars.SITE_TITLE }}
+      SITE_BASE_URL: ${{ vars.SITE_BASE_URL }}
+      # An unset variable expands to "", which reel treats as unset.
+      CONTACT_FORM_URL: ${{ vars.CONTACT_FORM_URL }}
+    steps:
+      # Without it the live site would link to the localhost default.
+      - name: Check site variables
+        run: '[ -n "$SITE_BASE_URL" ] || { echo "::error::SITE_BASE_URL variable is not set"; exit 1; }'
+
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          uv sync --locked
+          npm ci
+
+      # Unique key per run; restore-keys picks the newest earlier cache.
+      - name: Restore Drive cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache
+          key: reel-cache-${{ github.run_id }}
+          restore-keys: reel-cache-
+
+      - name: Remember previous manifest
+        run: cp .cache/manifest.json "$RUNNER_TEMP/manifest.prev.json" 2>/dev/null || true
+
+      - name: Write service account key
+        env:
+          GCP_SA_KEY_JSON: ${{ secrets.GCP_SA_KEY_JSON }}
+        run: |
+          umask 077
+          printf '%s' "$GCP_SA_KEY_JSON" > "$RUNNER_TEMP/gcp-sa.json"
+
+      - name: Sync from Drive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-sa.json
+        run: uv run reel sync
+
+      - name: Detect changes
+        id: changes
+        run: |
+          # Also compare the commit, so a failed code deploy is retried by the next schedule.
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ] \
+            && cmp -s .cache/manifest.json "$RUNNER_TEMP/manifest.prev.json" \
+            && [ "$(cat .cache/deployed-sha 2>/dev/null)" = "$GITHUB_SHA" ]; then
+            echo "No Drive changes; skipping build and deploy."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build site
+        if: steps.changes.outputs.changed == 'true'
+        run: uv run reel build
+
+      - name: Deploy to Vercel
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx --yes vercel@65.4.0 deploy dist --prod --yes --token "$VERCEL_TOKEN"
+
+      # Saved only after a successful deploy, so a failed deploy is retried next run.
+      - name: Record deployed commit
+        if: steps.changes.outputs.changed == 'true'
+        run: echo "$GITHUB_SHA" > .cache/deployed-sha
+
+      - name: Save Drive cache
+        if: steps.changes.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache
+          key: reel-cache-${{ github.run_id }}
