@@ -25,7 +25,7 @@ jobs:
       DRIVE_ROOT_FOLDER_ID: ${{ vars.DRIVE_ROOT_FOLDER_ID }}
       SITE_TITLE: ${{ vars.SITE_TITLE }}
       SITE_BASE_URL: ${{ vars.SITE_BASE_URL }}
-      # An unset variable expands to "", which reel treats as unset.
+      # An unset variable expands to "", which portfolio treats as unset.
       CONTACT_FORM_URL: ${{ vars.CONTACT_FORM_URL }}
     steps:
       # Without it the live site would link to the localhost default.
@@ -53,8 +53,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache
-          key: reel-cache-${{ github.run_id }}
-          restore-keys: reel-cache-
+          key: portfolio-cache-${{ github.run_id }}
+          restore-keys: portfolio-cache-
 
       - name: Remember previous manifest
         run: cp .cache/manifest.json "$RUNNER_TEMP/manifest.prev.json" 2>/dev/null || true
@@ -69,7 +69,7 @@ jobs:
       - name: Sync from Drive
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-sa.json
-        run: uv run reel sync
+        run: uv run portfolio sync
 
       - name: Detect changes
         id: changes
@@ -86,7 +86,7 @@ jobs:
 
       - name: Build site
         if: steps.changes.outputs.changed == 'true'
-        run: uv run reel build
+        run: uv run portfolio build
 
       - name: Deploy to Vercel
         if: steps.changes.outputs.changed == 'true'
@@ -106,4 +106,4 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .cache
-          key: reel-cache-${{ github.run_id }}
+          key: portfolio-cache-${{ github.run_id }}

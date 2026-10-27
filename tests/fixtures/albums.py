@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from reel.models import Album, Photo
+from portfolio.models import Album, Photo
 from tests.fixtures.images import make_image
 
 _EPOCH = datetime(2024, 1, 1, tzinfo=UTC)

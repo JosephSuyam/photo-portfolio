@@ -1,14 +1,14 @@
-"""The ready-to-upload samples in docs/examples/ and .env.example must match what reel accepts."""
+"""Ready-to-upload samples in docs/examples/ and .env.example must match what the site accepts."""
 
 import logging
 from pathlib import Path
 
 import pytest
 
-from reel.build import build_site
-from reel.config import is_valid_form_url, parse_env_file
-from reel.models import Manifest
-from reel.pages import (
+from portfolio.build import build_site
+from portfolio.config import is_valid_form_url, parse_env_file
+from portfolio.models import Manifest
+from portfolio.pages import (
     AboutPage,
     ContactEntry,
     ContactPage,

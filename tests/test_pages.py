@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from reel.pages import (
+from portfolio.pages import (
     MAX_PAGE_BYTES,
     AboutPage,
     ContactEntry,

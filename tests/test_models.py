@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from reel.models import Manifest, original_path
+from portfolio.models import Manifest, original_path
 from tests.fixtures.albums import make_album, make_photo
 
 if TYPE_CHECKING:
-    from reel.models import TextFile
+    from portfolio.models import TextFile
 
 
 def test_manifest_json_round_trip_preserves_albums() -> None:
@@ -30,7 +30,7 @@ def test_original_path_unsafe_id_raises_value_error(tmp_path: Path, file_id: str
 
 
 def _about_file() -> "TextFile":
-    from reel.models import TextFile
+    from portfolio.models import TextFile
 
     return TextFile(
         file_id="t-about",
@@ -42,7 +42,7 @@ def _about_file() -> "TextFile":
 
 
 def test_text_file_md5_checksum_defaults_to_none() -> None:
-    from reel.models import TextFile
+    from portfolio.models import TextFile
 
     text_file = TextFile(
         file_id="t1",
@@ -73,7 +73,7 @@ def test_manifest_json_round_trip_preserves_text_pages() -> None:
 def test_text_file_missing_modified_time_rejected() -> None:
     from pydantic import ValidationError
 
-    from reel.models import TextFile
+    from portfolio.models import TextFile
 
     with pytest.raises(ValidationError):
         TextFile.model_validate(

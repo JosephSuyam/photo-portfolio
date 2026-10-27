@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from reel.config import ConfigError, load_settings, parse_env_file
+from portfolio.config import ConfigError, load_settings, parse_env_file
 
 REQUIRED = {
     "GOOGLE_APPLICATION_CREDENTIALS": "/keys/sa.json",
@@ -66,21 +66,21 @@ def test_load_settings_required_empty_treated_as_missing(tmp_path: Path) -> None
 
 
 def test_load_site_settings_nothing_set_uses_defaults(tmp_path: Path) -> None:
-    from reel.config import SiteSettings, load_site_settings
+    from portfolio.config import SiteSettings, load_site_settings
 
     settings = load_site_settings(tmp_path / "missing.env", environ={})
     assert settings == SiteSettings(site_title="Portfolio", site_base_url="http://localhost:8000")
 
 
 def test_load_site_settings_drive_settings_not_required(tmp_path: Path) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     settings = load_site_settings(tmp_path / "missing.env", environ={"SITE_TITLE": "Jo"})
     assert settings.site_title == "Jo"
 
 
 def test_load_site_settings_values_read_from_env_file(tmp_path: Path) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     env_file = tmp_path / ".env"
     env_file.write_text("SITE_BASE_URL=https://x.com/portfolio\n", encoding="utf-8")
@@ -89,7 +89,7 @@ def test_load_site_settings_values_read_from_env_file(tmp_path: Path) -> None:
 
 
 def test_load_site_settings_environ_overrides_env_file(tmp_path: Path) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     env_file = tmp_path / ".env"
     env_file.write_text("SITE_TITLE=From File\n", encoding="utf-8")
@@ -98,7 +98,7 @@ def test_load_site_settings_environ_overrides_env_file(tmp_path: Path) -> None:
 
 
 def test_load_site_settings_empty_value_uses_default(tmp_path: Path) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     settings = load_site_settings(tmp_path / "missing.env", environ={"SITE_TITLE": ""})
     assert settings.site_title == "Portfolio"
@@ -126,21 +126,21 @@ INVALID_FORM_URLS = [
 
 
 def test_load_site_settings_contact_form_url_https_accepted(tmp_path: Path) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     settings = load_site_settings(tmp_path / "missing.env", environ={"CONTACT_FORM_URL": FORM_URL})
     assert settings.contact_form_url == FORM_URL
 
 
 def test_load_site_settings_contact_form_url_unset_is_none(tmp_path: Path) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     settings = load_site_settings(tmp_path / "missing.env", environ={})
     assert settings.contact_form_url is None
 
 
 def test_load_site_settings_contact_form_url_empty_is_none(tmp_path: Path) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     settings = load_site_settings(tmp_path / "missing.env", environ={"CONTACT_FORM_URL": ""})
     assert settings.contact_form_url is None
@@ -150,7 +150,7 @@ def test_load_site_settings_contact_form_url_empty_is_none(tmp_path: Path) -> No
 def test_load_site_settings_contact_form_url_invalid_raises_config_error(
     tmp_path: Path, url: str
 ) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     with pytest.raises(ConfigError) as error:
         load_site_settings(tmp_path / "missing.env", environ={"CONTACT_FORM_URL": url})
@@ -161,7 +161,7 @@ def test_load_site_settings_contact_form_url_invalid_raises_config_error(
 def test_load_site_settings_contact_form_url_error_does_not_echo_value(
     tmp_path: Path, url: str
 ) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     with pytest.raises(ConfigError) as error:
         load_site_settings(tmp_path / "missing.env", environ={"CONTACT_FORM_URL": url})
@@ -184,7 +184,7 @@ def test_load_settings_contact_form_url_valid_accepted(tmp_path: Path) -> None:
 
 
 def test_load_site_settings_contact_form_url_read_from_env_file(tmp_path: Path) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     env_file = tmp_path / ".env"
     env_file.write_text(f"CONTACT_FORM_URL={FORM_URL}\n", encoding="utf-8")
@@ -193,7 +193,7 @@ def test_load_site_settings_contact_form_url_read_from_env_file(tmp_path: Path) 
 
 
 def test_load_site_settings_contact_form_url_environ_overrides_env_file(tmp_path: Path) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     env_file = tmp_path / ".env"
     env_file.write_text("CONTACT_FORM_URL=https://file.example.test/f\n", encoding="utf-8")
@@ -204,7 +204,7 @@ def test_load_site_settings_contact_form_url_environ_overrides_env_file(tmp_path
 def test_load_site_settings_invalid_env_file_url_overridden_by_valid_environ(
     tmp_path: Path,
 ) -> None:
-    from reel.config import load_site_settings
+    from portfolio.config import load_site_settings
 
     env_file = tmp_path / ".env"
     env_file.write_text("CONTACT_FORM_URL=http://file.example.test/f\n", encoding="utf-8")

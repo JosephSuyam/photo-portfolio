@@ -21,10 +21,10 @@ from pathlib import Path
 
 from PIL import Image
 
-from reel.build import build_site
-from reel.models import Album, Manifest, Photo, TextFile, original_path
-from reel.scripts import PROJECT_ROOT, compile_scripts
-from reel.server import make_preview_server
+from portfolio.build import build_site
+from portfolio.models import Album, Manifest, Photo, TextFile, original_path
+from portfolio.scripts import PROJECT_ROOT, compile_scripts
+from portfolio.server import make_preview_server
 
 FIXTURE_DIR = PROJECT_ROOT / ".tmp" / "e2e"
 SITE_TITLE = "Reel E2E"
@@ -142,7 +142,7 @@ def build_fixture_site() -> Path:
     cache, dist = FIXTURE_DIR / "cache", FIXTURE_DIR / "dist"
     manifest = make_manifest(cache)
     (cache / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
-    with tempfile.TemporaryDirectory(prefix="reel-scripts-") as scripts_dir:
+    with tempfile.TemporaryDirectory(prefix="portfolio-scripts-") as scripts_dir:
         compile_scripts(Path(scripts_dir))
         build_site(
             manifest,

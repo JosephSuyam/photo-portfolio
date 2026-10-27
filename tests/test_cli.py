@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from reel.cli import app
+from portfolio.cli import app
 from tests.fixtures.albums import make_album, make_photo, write_original
 
 runner = CliRunner()
@@ -30,7 +30,7 @@ def site_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _write_manifest(cwd: Path) -> None:
-    from reel.models import Manifest
+    from portfolio.models import Manifest
 
     cache = cwd / ".cache"
     write_original(cache, "p1")
@@ -43,9 +43,9 @@ def test_cli_build_no_manifest_exits_with_error(site_cwd: Path) -> None:
     assert result.exit_code == 1
 
 
-def test_cli_build_no_manifest_suggests_reel_sync(site_cwd: Path) -> None:
+def test_cli_build_no_manifest_suggests_portfolio_sync(site_cwd: Path) -> None:
     result = runner.invoke(app, ["build"])
-    assert "reel sync" in result.output
+    assert "portfolio sync" in result.output
 
 
 def test_cli_build_with_manifest_exits_zero(site_cwd: Path) -> None:
@@ -134,7 +134,7 @@ def test_cli_sync_malformed_key_does_not_echo_contents(drive_settings: Path) -> 
 
 
 def _use_fake_drive(monkeypatch: pytest.MonkeyPatch, drive: object) -> None:
-    from reel.drive import GoogleDriveClient
+    from portfolio.drive import GoogleDriveClient
 
     monkeypatch.setattr(GoogleDriveClient, "from_credentials", lambda _path: drive)
 
@@ -184,14 +184,14 @@ def test_cli_sync_success_reports_album_count(
 def test_cli_build_without_node_builds_without_script(
     site_cwd: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import reel.cli
-    from reel.scripts import NodeNotFoundError
+    import portfolio.cli
+    from portfolio.scripts import NodeNotFoundError
 
     def no_node(_out_dir: Path) -> None:
         raise NodeNotFoundError("Node.js not found.")
 
     _write_manifest(site_cwd)
-    monkeypatch.setattr(reel.cli, "compile_scripts", no_node)
+    monkeypatch.setattr(portfolio.cli, "compile_scripts", no_node)
     result = runner.invoke(app, ["build"])
     assert result.exit_code == 0 and "Building without the site script" in result.output
 
@@ -247,7 +247,7 @@ def test_cli_build_invalid_contact_form_url_writes_no_dist(
 
 def _record_build_site(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     """Replace `build_site` and `compile_scripts` in the CLI; return the build_site kwargs."""
-    import reel.cli
+    import portfolio.cli
 
     calls: dict[str, object] = {}
 
@@ -255,8 +255,8 @@ def _record_build_site(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
         calls.update(kwargs)
         return 1
 
-    monkeypatch.setattr(reel.cli, "build_site", fake_build_site)
-    monkeypatch.setattr(reel.cli, "compile_scripts", lambda _out_dir: None)
+    monkeypatch.setattr(portfolio.cli, "build_site", fake_build_site)
+    monkeypatch.setattr(portfolio.cli, "compile_scripts", lambda _out_dir: None)
     return calls
 
 

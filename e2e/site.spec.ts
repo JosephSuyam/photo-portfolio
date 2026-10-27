@@ -990,7 +990,7 @@ test.describe("theme with a light OS setting", () => {
 
   test("chosen theme is stored", async ({ page }) => {
     await themeToggle(page).click();
-    await expect.poll(() => page.evaluate(() => localStorage.getItem("reel-theme"))).toBe("dark");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("portfolio-theme"))).toBe("dark");
   });
 
   test("chosen theme persists across a reload", async ({ page }) => {
@@ -1026,7 +1026,7 @@ test.describe("theme with a light OS setting", () => {
 
   test.describe("with a stored light choice", () => {
     test.beforeEach(async ({ page }) => {
-      await page.evaluate(() => localStorage.setItem("reel-theme", "light"));
+      await page.evaluate(() => localStorage.setItem("portfolio-theme", "light"));
       await page.reload();
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     });
@@ -1227,7 +1227,7 @@ test.describe("theme transition", () => {
 
   test.describe("with a stored dark choice", () => {
     test.beforeEach(async ({ page }) => {
-      await page.evaluate(() => localStorage.setItem("reel-theme", "dark"));
+      await page.evaluate(() => localStorage.setItem("portfolio-theme", "dark"));
       await page.reload();
     });
 

@@ -1,4 +1,4 @@
-"""Command-line entry point: `reel sync | build | serve | watch | all`."""
+"""Command-line entry point: `portfolio sync | build | serve | watch | all`."""
 
 import logging
 import tempfile
@@ -11,13 +11,13 @@ import typer
 from google.auth.exceptions import GoogleAuthError
 from httplib2 import HttpLib2Error
 
-from reel.build import BuildError, base_path_from_url, build_site, load_manifest
-from reel.config import ConfigError, load_settings, load_site_settings
-from reel.drive import DriveError, GoogleDriveClient
-from reel.scripts import NodeNotFoundError, ScriptError, compile_scripts
-from reel.server import make_preview_server
-from reel.sync import sync_portfolio
-from reel.watch import WatchSession, needs_script_compile, run_build, watch
+from portfolio.build import BuildError, base_path_from_url, build_site, load_manifest
+from portfolio.config import ConfigError, load_settings, load_site_settings
+from portfolio.drive import DriveError, GoogleDriveClient
+from portfolio.scripts import NodeNotFoundError, ScriptError, compile_scripts
+from portfolio.server import make_preview_server
+from portfolio.sync import sync_portfolio
+from portfolio.watch import WatchSession, needs_script_compile, run_build, watch
 
 CACHE_DIR = Path(".cache")
 DIST_DIR = Path("dist")
@@ -75,7 +75,7 @@ def build(
         if scripts_dir is not None:
             count = _build_with_scripts(scripts_dir)
         else:
-            with tempfile.TemporaryDirectory(prefix="reel-scripts-") as temp_dir:
+            with tempfile.TemporaryDirectory(prefix="portfolio-scripts-") as temp_dir:
                 compiled: Path | None = Path(temp_dir)
                 try:
                     compile_scripts(Path(temp_dir))
@@ -109,7 +109,7 @@ def serve(
 ) -> None:
     """Serve the generated site locally."""
     if not directory.is_dir():
-        typer.echo(f"{directory}/ does not exist. Run `reel build` first.", err=True)
+        typer.echo(f"{directory}/ does not exist. Run `portfolio build` first.", err=True)
         raise typer.Exit(code=1)
     with make_preview_server(directory, port) as server:
         typer.echo(f"Serving {directory}/ on http://localhost:{port}")
@@ -120,16 +120,16 @@ def serve(
 def watch_command(
     port: Annotated[
         int | None,
-        typer.Option(help="Also serve dist/ on this port (leave unset if `reel serve` runs)."),
+        typer.Option(help="Also serve dist/ on this port (leave unset if `portfolio serve` runs)."),
     ] = None,
 ) -> None:
     """Rebuild the site whenever templates, CSS, TypeScript, Python, or the cache change.
 
     Pages built here reload themselves in the browser after each successful rebuild;
-    `reel build` output never includes that script.
+    `portfolio build` output never includes that script.
     """
     watched = [Path(__file__).parent, CACHE_DIR / "manifest.json", Path(".env")]
-    with tempfile.TemporaryDirectory(prefix="reel-watch-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="portfolio-watch-") as temp_dir:
         session = WatchSession(Path(temp_dir))
         _rebuild(session, changes=None)
         if port is not None:

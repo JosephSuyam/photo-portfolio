@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from reel.drive import FOLDER_MIME_TYPE, DriveClient, DriveError, DriveFile
+from portfolio.drive import FOLDER_MIME_TYPE, DriveClient, DriveError, DriveFile
 
 _EPOCH = datetime(2024, 1, 1, tzinfo=UTC)
 

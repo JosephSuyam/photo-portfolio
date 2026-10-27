@@ -2,7 +2,7 @@
 
 The site is built into a staging directory next to the output and swapped into place
 only when every page and image was written, so a failed build leaves the previous
-site untouched. Output directories not created by `reel build` are never overwritten.
+site untouched. Output directories not created by `portfolio build` are never overwritten.
 """
 
 import logging
@@ -19,14 +19,14 @@ from urllib.parse import quote, unquote, urlparse
 from jinja2 import Environment, PackageLoader, select_autoescape
 from pydantic import ValidationError
 
-from reel.images import ImageError, ImageVariant, ProcessedPhoto, process_photo
-from reel.models import Album, Manifest, Photo, TextFile, original_path
-from reel.pages import AboutPage, ContactPage, parse_about, parse_contact, read_page_text
+from portfolio.images import ImageError, ImageVariant, ProcessedPhoto, process_photo
+from portfolio.models import Album, Manifest, Photo, TextFile, original_path
+from portfolio.pages import AboutPage, ContactPage, parse_about, parse_contact, read_page_text
 
 logger = logging.getLogger(__name__)
 
 RESERVED_SLUGS = frozenset({"work", "static", "images", "about", "contact"})
-BUILD_MARKER = ".reel-build"
+BUILD_MARKER = ".portfolio-build"
 IMAGES_DIR = "images"
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -67,7 +67,7 @@ def make_environment() -> Environment:
     Album and photo names come from Drive and are untrusted, so autoescape is mandatory.
     """
     return Environment(
-        loader=PackageLoader("reel", "templates"),
+        loader=PackageLoader("portfolio", "templates"),
         autoescape=select_autoescape(["html"]),
     )
 
@@ -80,17 +80,17 @@ def base_path_from_url(url: str) -> str:
 
 
 def load_manifest(path: Path) -> Manifest:
-    """Read the manifest written by `reel sync`."""
+    """Read the manifest written by `portfolio sync`."""
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError as error:
-        raise BuildError(f"{path} not found. Run `reel sync` first.") from error
+        raise BuildError(f"{path} not found. Run `portfolio sync` first.") from error
     except OSError as error:
         raise BuildError(f"Cannot read {path}: {error}") from error
     try:
         return Manifest.model_validate_json(text)
     except ValidationError as error:
-        raise BuildError(f"{path} is not a valid manifest. Run `reel sync` again.") from error
+        raise BuildError(f"{path} is not a valid manifest. Run `portfolio sync` again.") from error
 
 
 def slug_problem(slug: str, seen: set[str]) -> str | None:
@@ -210,7 +210,7 @@ def build_site(
 ) -> int:
     """Render `manifest` into `out_dir` and return the number of published albums.
 
-    JavaScript files in `scripts_dir` (compiled from `src/reel/ts/`) are copied to `static/`
+    JavaScript files in `scripts_dir` (compiled from `src/portfolio/ts/`) are copied to `static/`
     and loaded on every page. Without them the site still works, minus the enhancements.
     About and Contact pages are written only when their text files are usable; the Contact
     page gets a form posting to `contact_form_url` when one is given.
@@ -274,7 +274,8 @@ def _ensure_replaceable(out_dir: Path) -> None:
         raise BuildError(f"{out_dir} exists and is not a directory.")
     if any(out_dir.iterdir()) and not (out_dir / BUILD_MARKER).is_file():
         raise BuildError(
-            f"{out_dir} is not empty and was not created by `reel build`; refusing to replace it."
+            f"{out_dir} is not empty and was not created by `portfolio build`; "
+            "refusing to replace it."
         )
 
 
@@ -324,7 +325,7 @@ def _process(
     if not source.is_file():
         raise BuildError(
             f"Album {album.name!r}, photo {photo.name!r} is missing from {source.parent}. "
-            "Run `reel sync` again."
+            "Run `portfolio sync` again."
         )
     try:
         return process_photo(source, images_dir)
@@ -345,7 +346,7 @@ def _load_page[T](
         raise BuildError(f"{text_file.name!r}: {error}") from error
     if not source.is_file():
         raise BuildError(
-            f"{text_file.name!r} is missing from {source.parent}. Run `reel sync` again."
+            f"{text_file.name!r} is missing from {source.parent}. Run `portfolio sync` again."
         )
     try:
         text = read_page_text(source, text_file.name)

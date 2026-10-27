@@ -1,6 +1,6 @@
-"""Compile the site's TypeScript (`src/reel/ts/`) with the project's local `tsc`.
+"""Compile the site's TypeScript (`src/portfolio/ts/`) with the project's local `tsc`.
 
-`PROJECT_ROOT` is the source checkout: reel runs from the repo, not as an installed wheel.
+`PROJECT_ROOT` is the source checkout: portfolio runs from the repo, not as an installed wheel.
 """
 
 import shutil

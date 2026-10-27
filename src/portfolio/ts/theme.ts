@@ -5,7 +5,7 @@
 {
   type Theme = "light" | "dark";
 
-  const STORAGE_KEY = "reel-theme";
+  const STORAGE_KEY = "portfolio-theme";
   const root = document.documentElement;
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");

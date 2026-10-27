@@ -9,8 +9,8 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "skipLibCheck": true,
-    "rootDir": "src/reel/ts",
+    "rootDir": "src/portfolio/ts",
     "outDir": ".tmp/ts"
   },
-  "include": ["src/reel/ts/**/*.ts"]
+  "include": ["src/portfolio/ts/**/*.ts"]
 }

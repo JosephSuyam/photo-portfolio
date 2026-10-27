@@ -1,7 +1,7 @@
 {
-  "name": "reel-site",
+  "name": "portfolio-site",
   "private": true,
-  "description": "Front-end tooling for reel: TypeScript for the site script and Playwright end-to-end tests.",
+  "description": "Front-end tooling for portfolio: TypeScript for the site script and Playwright end-to-end tests.",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p e2e/tsconfig.json",
     "test:e2e": "playwright test"

@@ -1,5 +1,5 @@
 [project]
-name = "reel"
+name = "portfolio"
 version = "0.1.0"
 description = "Static photographer portfolio generated from a Google Drive folder."
 readme = "README.md"
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-reel = "reel.cli:app"
+portfolio = "portfolio.cli:app"
 
 [dependency-groups]
 dev = [
@@ -28,7 +28,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/reel"]
+packages = ["src/portfolio"]
 
 [tool.ruff]
 line-length = 100

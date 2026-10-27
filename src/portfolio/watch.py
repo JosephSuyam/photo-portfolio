@@ -1,4 +1,4 @@
-"""Polling file watcher for `reel watch`: rebuild the site whenever a source file changes."""
+"""Polling file watcher for `portfolio watch`: rebuild the site whenever a source file changes."""
 
 import shutil
 import subprocess
@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from reel.scripts import compile_scripts
+from portfolio.scripts import compile_scripts
 
 Snapshot = dict[Path, int]
 
@@ -42,12 +42,12 @@ def needs_script_compile(changes: Iterable[Path]) -> bool:
 
 
 def run_build(scripts_dir: Path) -> bool:
-    """Run `reel build` in a fresh interpreter so edits to Python modules take effect."""
-    command = [sys.executable, "-m", "reel", "build", "--scripts-dir", str(scripts_dir)]
+    """Run `portfolio build` in a fresh interpreter so edits to Python modules take effect."""
+    command = [sys.executable, "-m", "portfolio", "build", "--scripts-dir", str(scripts_dir)]
     return subprocess.run(command, check=False).returncode == 0
 
 
-LIVE_RELOAD_SCRIPT = "reel-live-reload.js"
+LIVE_RELOAD_SCRIPT = "portfolio-live-reload.js"
 
 # Polls its own URL; a rebuild rewrites this file with a new id, so a mismatch means reload.
 _LIVE_RELOAD_SOURCE = """(() => {

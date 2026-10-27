@@ -5,13 +5,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from reel.models import TextFile
+    from portfolio.models import TextFile
 
 _EPOCH = datetime(2024, 1, 1, tzinfo=UTC)
 
 
 def make_text_file(file_id: str, name: str) -> "TextFile":
-    from reel.models import TextFile
+    from portfolio.models import TextFile
 
     return TextFile(
         file_id=file_id,

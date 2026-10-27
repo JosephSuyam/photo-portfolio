@@ -5,7 +5,7 @@ import httplib2
 import pytest
 from googleapiclient.errors import HttpError
 
-from reel.drive import DriveError, GoogleDriveClient
+from portfolio.drive import DriveError, GoogleDriveClient
 
 
 class _Service:
