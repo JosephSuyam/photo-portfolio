@@ -19,6 +19,8 @@ jobs:
   deploy:
     # workflow_dispatch can target any branch; only main goes to production.
     if: github.ref == 'refs/heads/main'
+    # Secrets and variables live in the "production" environment.
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
