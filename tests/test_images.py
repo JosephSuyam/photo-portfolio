@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from reel.images import (
+from portfolio.images import (
     DISPLAY_LONG_EDGE,
     THUMBNAIL_WIDTH,
     ImageError,

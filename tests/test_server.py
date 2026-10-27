@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from reel.server import make_preview_server
+from portfolio.server import make_preview_server
 
 
 def test_preview_server_queues_many_parallel_connections(tmp_path: Path) -> None:

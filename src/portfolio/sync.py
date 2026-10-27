@@ -12,9 +12,9 @@ import unicodedata
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from reel.build import RESERVED_SLUGS
-from reel.drive import DriveClient, DriveFile
-from reel.models import Album, Manifest, Photo, TextFile, original_path
+from portfolio.build import RESERVED_SLUGS
+from portfolio.drive import DriveClient, DriveFile
+from portfolio.models import Album, Manifest, Photo, TextFile, original_path
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-# reel
+# portfolio
 
 A static photographer portfolio generated from a Google Drive folder. Each subfolder of the root folder becomes an album; each image inside it becomes a photo. Optional `about.json` and `contact.json` in the root add About and Contact pages (samples in [docs/examples/](docs/examples/)), and the optional `CONTACT_FORM_URL` setting adds a message form to the Contact page. See [Drive folder conventions](docs/drive-conventions.md) and [Setup](docs/setup.md#contact-form-optional).
 
@@ -8,17 +8,17 @@ The look follows [reel.format.com](https://reel.format.com/): white or black the
 
 1. Install [uv](https://docs.astral.sh/uv/) and [Node.js](https://nodejs.org/) 20+, then `uv sync` and `npm install`.
 2. Copy `.env.example` to `.env` and fill it in (see [docs/setup.md](docs/setup.md)).
-3. `uv run reel sync`, then `uv run reel build`, then `uv run reel serve` and open http://localhost:8000.
+3. `uv run portfolio sync`, then `uv run portfolio build`, then `uv run portfolio serve` and open http://localhost:8000.
 
 ## Run locally
 
-1. `uv run reel sync` downloads new or changed photos from Drive into `.cache/`.
-2. `uv run reel build` compiles the site's TypeScript and renders `dist/`.
-3. `uv run reel serve` serves `dist/` at http://localhost:8000. Stop it with `Ctrl+C`.
+1. `uv run portfolio sync` downloads new or changed photos from Drive into `.cache/`.
+2. `uv run portfolio build` compiles the site's TypeScript and renders `dist/`.
+3. `uv run portfolio serve` serves `dist/` at http://localhost:8000. Stop it with `Ctrl+C`.
 
-`serve` doesn't sync or build, so re-run steps 1 and 2 after changing photos in Drive (`uv run reel all` does both).
+`serve` doesn't sync or build, so re-run steps 1 and 2 after changing photos in Drive (`uv run portfolio all` does both).
 
-While editing templates, CSS, or TypeScript, `uv run reel watch` rebuilds on every change and reloads open pages. Add `--port 8000` if `reel serve` isn't already running.
+While editing templates, CSS, or TypeScript, `uv run portfolio watch` rebuilds on every change and reloads open pages. Add `--port 8000` if `portfolio serve` isn't already running.
 
 `serve` options:
 
@@ -43,4 +43,4 @@ The server listens on `localhost` only. It is for previewing, not for hosting.
 
 ## Credits
 
-Headlines use [Bodoni Moda](https://fonts.google.com/specimen/Bodoni+Moda), self-hosted in `src/reel/static/fonts/` and licensed under the SIL Open Font License 1.1 (see `src/reel/static/fonts/OFL.txt`).
+Headlines use [Bodoni Moda](https://fonts.google.com/specimen/Bodoni+Moda), self-hosted in `src/portfolio/static/fonts/` and licensed under the SIL Open Font License 1.1 (see `src/portfolio/static/fonts/OFL.txt`).

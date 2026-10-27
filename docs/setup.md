@@ -17,7 +17,7 @@ Environment variables override `.env`. If you edit `.env` while VS Code is open,
 
 ## Contact form (optional)
 
-Adds a "Send a message" form to the Contact page. The site is static, so a form service receives the messages. The Contact page needs a usable `contact.json`; without one, `reel build` warns that the form is not shown.
+Adds a "Send a message" form to the Contact page. The site is static, so a form service receives the messages. The Contact page needs a usable `contact.json`; without one, `portfolio build` warns that the form is not shown.
 
 1. Pick a service that accepts a plain HTML form POST, e.g. [Formspree](https://formspree.io/). Create a form and copy its `https://` endpoint.
 2. Set it in `.env`:
@@ -26,8 +26,8 @@ Adds a "Send a message" form to the Contact page. The site is static, so a form 
    CONTACT_FORM_URL=https://formspree.io/f/your-form-id
    ```
 
-   Only `https://` URLs are accepted. Otherwise `reel sync` and `reel build` stop with `CONTACT_FORM_URL must be an https:// URL.`
-3. Restart VS Code if it injects `.env`, then run `uv run reel build`.
+   Only `https://` URLs are accepted. Otherwise `portfolio sync` and `portfolio build` stop with `CONTACT_FORM_URL must be an https:// URL.`
+3. Restart VS Code if it injects `.env`, then run `uv run portfolio build`.
 4. To remove the form, unset `CONTACT_FORM_URL` and build again: the Contact page then shows links only.
 
 The form posts `name`, `email`, and `message`, plus an empty hidden honeypot field `_gotcha` that spam bots tend to fill in. The endpoint is visible in the page's HTML, as with any form. The service's free-tier limits, cost, and where it stores visitor messages are your choice and responsibility. Tests never call the service.

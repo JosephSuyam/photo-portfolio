@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from reel.models import Album
+from portfolio.models import Album
 from tests.fixtures.albums import (
     make_album,
     make_photo,
@@ -19,7 +19,7 @@ from tests.fixtures.html import Element, parse_html
 from tests.fixtures.pages import make_text_file, write_text_original
 
 if TYPE_CHECKING:
-    from reel.images import ProcessedPhoto
+    from portfolio.images import ProcessedPhoto
 
 # Names from build.py are imported inside tests so one missing name fails only the tests
 # that use it.
@@ -38,15 +38,15 @@ def out(tmp_path: Path) -> Path:
 def _build(
     albums: list[Album], cache: Path, out: Path, site_title: str = "Site", base_path: str = "/"
 ) -> None:
-    from reel.build import build_site
-    from reel.models import Manifest
+    from portfolio.build import build_site
+    from portfolio.models import Manifest
 
     build_site(Manifest(albums=albums), cache, out, site_title, base_path)
 
 
 def _expected(source: Path, scratch: Path) -> "ProcessedPhoto":
     """Derived names for `source`; content hashing makes them independent of the out dir."""
-    from reel.images import process_photo
+    from portfolio.images import process_photo
 
     scratch.mkdir(parents=True, exist_ok=True)
     return process_photo(source, scratch)
@@ -110,7 +110,7 @@ def _albums(cache: Path, count: int, photos_each: int = 1) -> list[Album]:
     ],
 )
 def test_base_path_from_url_returns_slash_wrapped_path(url: str, expected: str) -> None:
-    from reel.build import base_path_from_url
+    from portfolio.build import base_path_from_url
 
     assert base_path_from_url(url) == expected
 
@@ -119,8 +119,8 @@ def test_base_path_from_url_returns_slash_wrapped_path(url: str, expected: str) 
 
 
 def test_load_manifest_valid_file_returns_manifest(tmp_path: Path) -> None:
-    from reel.build import load_manifest
-    from reel.models import Manifest
+    from portfolio.build import load_manifest
+    from portfolio.models import Manifest
 
     manifest = Manifest(albums=[make_album("a", [make_photo("p1")])])
     path = tmp_path / "manifest.json"
@@ -128,15 +128,15 @@ def test_load_manifest_valid_file_returns_manifest(tmp_path: Path) -> None:
     assert load_manifest(path) == manifest
 
 
-def test_load_manifest_missing_file_mentions_reel_sync(tmp_path: Path) -> None:
-    from reel.build import BuildError, load_manifest
+def test_load_manifest_missing_file_mentions_portfolio_sync(tmp_path: Path) -> None:
+    from portfolio.build import BuildError, load_manifest
 
-    with pytest.raises(BuildError, match="reel sync"):
+    with pytest.raises(BuildError, match="portfolio sync"):
         load_manifest(tmp_path / "manifest.json")
 
 
 def test_load_manifest_invalid_json_raises_build_error(tmp_path: Path) -> None:
-    from reel.build import BuildError, load_manifest
+    from portfolio.build import BuildError, load_manifest
 
     path = tmp_path / "manifest.json"
     path.write_text("{not json", encoding="utf-8")
@@ -145,7 +145,7 @@ def test_load_manifest_invalid_json_raises_build_error(tmp_path: Path) -> None:
 
 
 def test_load_manifest_wrong_schema_raises_build_error(tmp_path: Path) -> None:
-    from reel.build import BuildError, load_manifest
+    from portfolio.build import BuildError, load_manifest
 
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps({"albums": [{"slug": "a"}]}), encoding="utf-8")
@@ -158,7 +158,7 @@ def test_load_manifest_wrong_schema_raises_build_error(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "relative",
-    ["index.html", "work/index.html", "a/index.html", "c/index.html", ".reel-build"],
+    ["index.html", "work/index.html", "a/index.html", "c/index.html", ".portfolio-build"],
 )
 def test_build_site_writes_expected_file(cache: Path, out: Path, relative: str) -> None:
     _build(_three_albums(cache), cache, out)
@@ -166,7 +166,7 @@ def test_build_site_writes_expected_file(cache: Path, out: Path, relative: str) 
 
 
 def test_build_site_copies_stylesheet(cache: Path, out: Path) -> None:
-    from reel.build import STATIC_DIR
+    from portfolio.build import STATIC_DIR
 
     _build(_three_albums(cache), cache, out)
     assert (out / "static" / "site.css").read_bytes() == (STATIC_DIR / "site.css").read_bytes()
@@ -174,7 +174,7 @@ def test_build_site_copies_stylesheet(cache: Path, out: Path) -> None:
 
 @pytest.mark.parametrize("name", ["bodoni-moda-latin.woff2", "OFL.txt"])
 def test_build_site_copies_font_file(cache: Path, out: Path, name: str) -> None:
-    from reel.build import STATIC_DIR
+    from portfolio.build import STATIC_DIR
 
     _build(_three_albums(cache), cache, out)
     copied = out / "static" / "fonts" / name
@@ -424,7 +424,7 @@ def test_build_site_all_photos_unreadable_album_unpublished(cache: Path, out: Pa
 
 
 def test_build_site_missing_original_raises_build_error(cache: Path, out: Path) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     (cache / "originals").mkdir(parents=True)
     with pytest.raises(BuildError):
@@ -436,7 +436,7 @@ def test_build_site_missing_original_raises_build_error(cache: Path, out: Path) 
 
 @pytest.mark.parametrize("slug", ["../evil", "A B", "", "a/b", "-a", "a-", "a--b", "Book"])
 def test_build_site_invalid_slug_raises_build_error(cache: Path, out: Path, slug: str) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     write_original(cache, "p1")
     with pytest.raises(BuildError):
@@ -444,7 +444,7 @@ def test_build_site_invalid_slug_raises_build_error(cache: Path, out: Path, slug
 
 
 def test_build_site_traversal_slug_writes_nothing_outside_out(cache: Path, out: Path) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     write_original(cache, "p1")
     with pytest.raises(BuildError):
@@ -453,14 +453,14 @@ def test_build_site_traversal_slug_writes_nothing_outside_out(cache: Path, out: 
 
 
 def test_reserved_slugs_match_site_paths() -> None:
-    from reel.build import RESERVED_SLUGS
+    from portfolio.build import RESERVED_SLUGS
 
     assert frozenset({"work", "static", "images", "about", "contact"}) == RESERVED_SLUGS
 
 
 @pytest.mark.parametrize("slug", ["work", "static", "images", "about", "contact"])
 def test_build_site_reserved_slug_raises_build_error(cache: Path, out: Path, slug: str) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     write_original(cache, "p1")
     with pytest.raises(BuildError):
@@ -468,7 +468,7 @@ def test_build_site_reserved_slug_raises_build_error(cache: Path, out: Path, slu
 
 
 def test_build_site_duplicate_slug_raises_build_error(cache: Path, out: Path) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     write_original(cache, "p1")
     write_original(cache, "p2", color=(0, 0, 255))
@@ -545,7 +545,7 @@ def test_build_site_rebuild_removes_stale_album_from_index(cache: Path, out: Pat
 
 
 def test_build_site_foreign_non_empty_out_raises_build_error(cache: Path, out: Path) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     out.mkdir()
     (out / "important.txt").write_text("keep me", encoding="utf-8")
@@ -554,7 +554,7 @@ def test_build_site_foreign_non_empty_out_raises_build_error(cache: Path, out: P
 
 
 def test_build_site_foreign_non_empty_out_left_untouched(cache: Path, out: Path) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     out.mkdir()
     (out / "important.txt").write_text("keep me", encoding="utf-8")
@@ -571,7 +571,7 @@ def test_build_site_existing_empty_out_is_used(cache: Path, out: Path) -> None:
 
 
 def test_build_site_failed_rebuild_keeps_previous_output(cache: Path, out: Path) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     albums = _three_albums(cache)
     _build(albums, cache, out)
@@ -599,7 +599,7 @@ def test_build_site_unreadable_cover_falls_back_to_first_photo(
 
 
 def test_build_site_unsafe_file_id_raises_build_error(cache: Path, out: Path) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     write_original(cache, "p1")
     with pytest.raises(BuildError):
@@ -607,7 +607,7 @@ def test_build_site_unsafe_file_id_raises_build_error(cache: Path, out: Path) ->
 
 
 def test_build_site_out_is_file_raises_build_error(cache: Path, out: Path) -> None:
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     out.write_text("not a directory", encoding="utf-8")
     with pytest.raises(BuildError):
@@ -617,7 +617,7 @@ def test_build_site_out_is_file_raises_build_error(cache: Path, out: Path) -> No
 def test_build_site_failed_swap_keeps_previous_output(
     cache: Path, out: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from reel.build import BuildError, staging_dir_for
+    from portfolio.build import BuildError, staging_dir_for
 
     albums = _three_albums(cache)
     _build(albums, cache, out)
@@ -641,7 +641,7 @@ def test_build_site_write_error_raises_build_error(
 ) -> None:
     import shutil
 
-    from reel.build import BuildError
+    from portfolio.build import BuildError
 
     def failing_copytree(*args: object, **kwargs: object) -> None:
         raise OSError("disk full")
@@ -652,7 +652,7 @@ def test_build_site_write_error_raises_build_error(
 
 
 def test_srcset_lists_each_url_once() -> None:
-    from reel.build import srcset
+    from portfolio.build import srcset
 
     assert (
         srcset([("/a.jpg", 600), ("/a.jpg", 600), ("/b.jpg", 2000)]) == "/a.jpg 600w, /b.jpg 2000w"
@@ -678,8 +678,8 @@ def test_build_site_album_page_work_nav_not_current(cache: Path, out: Path) -> N
 
 
 def _build_with_scripts(cache: Path, out: Path, tmp_path: Path) -> None:
-    from reel.build import build_site
-    from reel.models import Manifest
+    from portfolio.build import build_site
+    from portfolio.models import Manifest
 
     scripts = tmp_path / "scripts"
     scripts.mkdir()
@@ -704,13 +704,13 @@ def test_build_site_without_scripts_has_no_script_tag(cache: Path, out: Path, pa
 
 
 def test_base_path_from_url_space_in_path_is_percent_encoded() -> None:
-    from reel.build import base_path_from_url
+    from portfolio.build import base_path_from_url
 
     assert base_path_from_url("https://x.com/my portfolio") == "/my%20portfolio/"
 
 
 def test_base_path_from_url_already_encoded_path_not_double_encoded() -> None:
-    from reel.build import base_path_from_url
+    from portfolio.build import base_path_from_url
 
     assert base_path_from_url("https://x.com/my%20portfolio/") == "/my%20portfolio/"
 
@@ -719,13 +719,13 @@ def test_base_path_from_url_already_encoded_path_not_double_encoded() -> None:
 
 
 def test_row_height_vw_is_twenty_eight() -> None:
-    from reel.build import ROW_HEIGHT_VW
+    from portfolio.build import ROW_HEIGHT_VW
 
     assert ROW_HEIGHT_VW == 28
 
 
 def test_row_height_vw_matches_tile_basis_in_stylesheet() -> None:
-    from reel.build import ROW_HEIGHT_VW, STATIC_DIR
+    from portfolio.build import ROW_HEIGHT_VW, STATIC_DIR
 
     css = (STATIC_DIR / "site.css").read_text(encoding="utf-8")
     basis = re.search(
@@ -751,16 +751,16 @@ def test_row_height_vw_matches_tile_basis_in_stylesheet() -> None:
 def test_justified_sizes_returns_twice_row_height_width(
     width: int, height: int, desktop: str
 ) -> None:
-    from reel.build import justified_sizes
-    from reel.images import ImageVariant
+    from portfolio.build import justified_sizes
+    from portfolio.images import ImageVariant
 
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=width, height=height)
     assert justified_sizes(variant) == f"(max-width: 767px) 100vw, {desktop}"
 
 
 def test_justified_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
-    from reel.build import justified_sizes
-    from reel.images import ImageVariant
+    from portfolio.build import justified_sizes
+    from portfolio.images import ImageVariant
 
     # 56 * 116 / 112 is exactly 58, but (116 / 112) * 28 * 2 is 58.00000000000001 in floats.
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=116, height=112)
@@ -768,8 +768,8 @@ def test_justified_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
 
 
 def test_justified_sizes_very_wide_photo_capped_at_viewport_width() -> None:
-    from reel.build import justified_sizes
-    from reel.images import ImageVariant
+    from portfolio.build import justified_sizes
+    from portfolio.images import ImageVariant
 
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=6000, height=1000)
     assert justified_sizes(variant) == "(max-width: 767px) 100vw, 100vw"
@@ -934,21 +934,21 @@ def _rows(spans: list[int]) -> list[list[int]]:
     ],
 )
 def test_album_card_spans_count_returns_expected_spans(count: int, expected: list[int]) -> None:
-    from reel.build import album_card_spans
+    from portfolio.build import album_card_spans
 
     assert album_card_spans(count) == expected
 
 
 @pytest.mark.parametrize("count", range(21))
 def test_album_card_spans_returns_one_span_per_card(count: int) -> None:
-    from reel.build import album_card_spans
+    from portfolio.build import album_card_spans
 
     assert len(album_card_spans(count)) == count
 
 
 @pytest.mark.parametrize("count", range(21))
 def test_album_card_spans_every_row_fills_twelve_columns(count: int) -> None:
-    from reel.build import album_card_spans
+    from portfolio.build import album_card_spans
 
     row_widths = [sum(row) for row in _rows(album_card_spans(count))]
     assert all(width == _CARD_COLUMNS for width in row_widths)
@@ -956,20 +956,20 @@ def test_album_card_spans_every_row_fills_twelve_columns(count: int) -> None:
 
 @pytest.mark.parametrize("count", range(21))
 def test_album_card_spans_uses_only_allowed_spans(count: int) -> None:
-    from reel.build import album_card_spans
+    from portfolio.build import album_card_spans
 
     assert set(album_card_spans(count)) <= _CARD_SPANS
 
 
 @pytest.mark.parametrize("count", range(21))
 def test_album_card_spans_only_last_card_may_span_full_row(count: int) -> None:
-    from reel.build import album_card_spans
+    from portfolio.build import album_card_spans
 
     assert _CARD_COLUMNS not in album_card_spans(count)[:-1]
 
 
 def test_album_card_spans_negative_count_raises_value_error() -> None:
-    from reel.build import album_card_spans
+    from portfolio.build import album_card_spans
 
     with pytest.raises(ValueError):
         album_card_spans(-1)
@@ -983,20 +983,20 @@ def test_album_card_spans_negative_count_raises_value_error() -> None:
     [("FEATURE_WIDTH_VW", 100), ("FEATURE_ASPECT", Fraction(21, 9)), ("CARDS_PER_ROW", 2)],
 )
 def test_index_layout_constant_matches_design(name: str, expected: object) -> None:
-    import reel.build
+    import portfolio.build
 
-    assert getattr(reel.build, name) == expected
+    assert getattr(portfolio.build, name) == expected
 
 
 @pytest.mark.parametrize(("span", "expected"), [(6, Fraction(3, 2)), (12, Fraction(3, 1))])
 def test_card_aspect_span_returns_frame_ratio(span: int, expected: Fraction) -> None:
-    from reel.build import card_aspect
+    from portfolio.build import card_aspect
 
     assert card_aspect(span) == expected
 
 
 def test_card_aspect_full_row_frame_as_tall_as_half_row_frame() -> None:
-    from reel.build import card_aspect
+    from portfolio.build import card_aspect
 
     # Frame height is proportional to span / aspect; both spans must give the same height.
     assert Fraction(12) / card_aspect(12) == Fraction(6) / card_aspect(6)
@@ -1019,16 +1019,16 @@ def test_card_aspect_full_row_frame_as_tall_as_half_row_frame() -> None:
 def test_cover_sizes_returns_cover_crop_width(
     width: int, height: int, width_vw: int, box_aspect: Fraction, desktop: str
 ) -> None:
-    from reel.build import cover_sizes
-    from reel.images import ImageVariant
+    from portfolio.build import cover_sizes
+    from portfolio.images import ImageVariant
 
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=width, height=height)
     assert cover_sizes(variant, width_vw, box_aspect) == f"(max-width: 767px) 100vw, {desktop}"
 
 
 def test_cover_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
-    from reel.build import cover_sizes
-    from reel.images import ImageVariant
+    from portfolio.build import cover_sizes
+    from portfolio.images import ImageVariant
 
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=1120, height=1000)
     assert cover_sizes(variant, 25, Fraction(1)) == "(max-width: 767px) 100vw, 28vw"
@@ -1353,7 +1353,7 @@ def test_build_site_with_scripts_head_applies_stored_theme(
     _build_with_scripts(cache, out, tmp_path)
     head = _one(_page(out / page), "head")
     inline = [script for script in head.find_all("script") if "src" not in script.attrs]
-    assert any("reel-theme" in script.text() for script in inline)
+    assert any("portfolio-theme" in script.text() for script in inline)
 
 
 @pytest.mark.parametrize("page", ["index.html", "a/index.html"])
@@ -1363,7 +1363,7 @@ def test_build_site_with_scripts_stored_theme_applied_before_stylesheet(
     _build_with_scripts(cache, out, tmp_path)
     head = _one(_page(out / page), "head")
     order = [
-        "theme" if element.tag == "script" and "reel-theme" in element.text() else "stylesheet"
+        "theme" if element.tag == "script" and "portfolio-theme" in element.text() else "stylesheet"
         for element in head.descendants()
         if (element.tag == "script" and "src" not in element.attrs)
         or (element.tag == "link" and element.attrs.get("rel") == "stylesheet")
@@ -1413,8 +1413,8 @@ def _build_pages(
     albums: list[Album] | None = None,
 ) -> int:
     """Build three albums plus the given about.json / contact.json texts (None = not in Drive)."""
-    from reel.build import build_site
-    from reel.models import Manifest
+    from portfolio.build import build_site
+    from portfolio.models import Manifest
 
     about_file = contact_file = None
     if about is not None:
@@ -1830,21 +1830,21 @@ def test_build_site_contact_form_url_never_on_other_pages(cache: Path, out: Path
 def test_build_site_text_page_original_missing_raises_build_error(
     cache: Path, out: Path, field: str
 ) -> None:
-    from reel.build import BuildError, build_site
-    from reel.models import Manifest
+    from portfolio.build import BuildError, build_site
+    from portfolio.models import Manifest
 
     manifest = Manifest(
         albums=_three_albums(cache), **{field: make_text_file(f"t-{field}", f"{field}.json")}
     )
     with pytest.raises(
-        BuildError, match=rf"'{field}\.json' is missing from .*Run `reel sync` again"
+        BuildError, match=rf"'{field}\.json' is missing from .*Run `portfolio sync` again"
     ):
         build_site(manifest, cache, out, "Site")
 
 
 def test_build_site_text_page_missing_message_uses_drive_name(cache: Path, out: Path) -> None:
-    from reel.build import BuildError, build_site
-    from reel.models import Manifest
+    from portfolio.build import BuildError, build_site
+    from portfolio.models import Manifest
 
     manifest = Manifest(albums=[], about=make_text_file("t-about", "About.JSON"))
     with pytest.raises(BuildError, match=r"'About\.JSON' is missing from"):
@@ -1852,8 +1852,8 @@ def test_build_site_text_page_missing_message_uses_drive_name(cache: Path, out: 
 
 
 def test_build_site_text_page_missing_keeps_previous_output(cache: Path, out: Path) -> None:
-    from reel.build import BuildError, build_site
-    from reel.models import Manifest
+    from portfolio.build import BuildError, build_site
+    from portfolio.models import Manifest
 
     _build_pages(cache, out)
     before = _snapshot(out)
@@ -1865,8 +1865,8 @@ def test_build_site_text_page_missing_keeps_previous_output(cache: Path, out: Pa
 
 
 def test_build_site_text_page_unsafe_id_raises_build_error(cache: Path, out: Path) -> None:
-    from reel.build import BuildError, build_site
-    from reel.models import Manifest
+    from portfolio.build import BuildError, build_site
+    from portfolio.models import Manifest
 
     manifest = Manifest(albums=[], contact=make_text_file("../evil", "contact.json"))
     with pytest.raises(BuildError):
@@ -1989,8 +1989,8 @@ def test_build_site_invalid_contact_json_omits_page(cache: Path, out: Path) -> N
 def test_build_site_invalid_json_warning_names_drive_file(
     cache: Path, out: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    from reel.build import build_site
-    from reel.models import Manifest
+    from portfolio.build import build_site
+    from portfolio.models import Manifest
 
     caplog.set_level(logging.WARNING)
     write_text_original(cache, "t-about", '{"lede": "x",')

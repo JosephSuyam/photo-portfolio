@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from reel.build import RESERVED_SLUGS, load_manifest
-from reel.drive import SHORTCUT_MIME_TYPE, DriveError
-from reel.models import Manifest, original_path
-from reel.sync import (
+from portfolio.build import RESERVED_SLUGS, load_manifest
+from portfolio.drive import SHORTCUT_MIME_TYPE, DriveError
+from portfolio.models import Manifest, original_path
+from portfolio.sync import (
     MANIFEST_NAME,
     SUPPORTED_MIME_TYPES,
     display_title,

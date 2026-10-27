@@ -4,7 +4,7 @@ import httplib2
 import pytest
 from googleapiclient.errors import HttpError
 
-from reel.drive import (
+from portfolio.drive import (
     FOLDER_MIME_TYPE,
     SHORTCUT_MIME_TYPE,
     DriveError,

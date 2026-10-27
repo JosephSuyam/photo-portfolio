@@ -8,12 +8,12 @@ description: Build the site, serve it, and take headless Edge screenshots at des
 Tests prove behavior; screenshots catch layout problems (overlaps, cropped images, wrong grid). Always tell the user which **data source** you previewed. Generated placeholder images look like colored blocks or gradients and can be mistaken for "photos not showing".
 
 ## 1. Pick the data source
-- **Real photos** (default when `.env` is configured): `uv run reel sync`, then `uv run reel build`. Sync only reads Drive. Check `.env` exists without reading it.
+- **Real photos** (default when `.env` is configured): `uv run portfolio sync`, then `uv run portfolio build`. Sync only reads Drive. Check `.env` exists without reading it.
 - **Fixture** (no Drive access, or to reproduce a test): `uv run python e2e/serve_fixture.py --port 8124` builds generated images into `.tmp/e2e/dist` and serves them (run in background).
 
 ## 2. Serve
-- Real site: if nothing answers on http://localhost:8000 (`curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/`), start `uv run reel serve` in the background. A running server picks up a rebuild on its own (`dist/` is swapped atomically); restart it only after changing `src/reel/server.py` or `cli.py`.
-- Never use a bare `http.server`: its listen backlog of 5 refuses parallel image requests. Use `reel serve` or `reel.server.make_preview_server`.
+- Real site: if nothing answers on http://localhost:8000 (`curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/`), start `uv run portfolio serve` in the background. A running server picks up a rebuild on its own (`dist/` is swapped atomically); restart it only after changing `src/portfolio/server.py` or `cli.py`.
+- Never use a bare `http.server`: its listen backlog of 5 refuses parallel image requests. Use `portfolio serve` or `portfolio.server.make_preview_server`.
 
 ## 3. Screenshot with headless Edge
 Write screenshots to `.tmp/shots/` (gitignored). For each page, run:

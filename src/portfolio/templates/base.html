@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ site_title }}{% endblock %}</title>
   {% if script_names %}
-  <script>{ try { const theme = localStorage.getItem("reel-theme"); if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme; } catch (error) {} }</script>
+  <script>{ try { const theme = localStorage.getItem("portfolio-theme"); if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme; } catch (error) {} }</script>
   {% endif %}
   <link rel="stylesheet" href="{{ base_path }}static/site.css">
   {% for name in script_names %}

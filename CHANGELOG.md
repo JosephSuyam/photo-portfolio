@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- "Reel" redesign: a white page (black in dark mode) with Bodoni display headlines over Helvetica text. Every page opens with the site title centered over a spaced uppercase menu, with the theme toggle at the top right. The 1.5 s theme cross-fade is unchanged.
+- "Portfolio" redesign: a white page (black in dark mode) with Bodoni display headlines over Helvetica text. Every page opens with the site title centered over a spaced uppercase menu, with the theme toggle at the top right. The 1.5 s theme cross-fade is unchanged.
 - Album index: "Work" and the counts centered, then the first album as a full-bleed 21:9 feature (4:5 on phones) with its label, title, and count in white over the photo. The other albums follow edge to edge, two per row in 3:2 frames; a lone last card spans the row at 3:1, the same height. Titles and counts sit on the photos, and hovering a card zooms it slightly (not with reduced motion). Hovering or focusing a card still previews it in the feature.
 - Album pages: justified rows replace the mosaic. Every photo is shown whole at its own aspect ratio, rows share one height, and the last row isn't stretched. Phones get one column.
 - About and Contact are centered columns. The Contact form still appears only when `CONTACT_FORM_URL` is set.
@@ -16,9 +16,9 @@
 - Album pages: title and photo count, then the photos. "Next" is replaced by a Previous/Next pager, and both links wrap around.
 - Phones: one column on every page.
 - Album pages scroll vertically (photos fade in and zoom on hover unless reduced motion is set). Clicking a photo opens a lightbox with previous/next buttons, arrow keys, swipe, and an "n / total" counter. Without JavaScript the photo links to its display JPEG.
-- `reel sync`: incremental, read-only sync of albums and photos from Google Drive.
-- Site script is now TypeScript, compiled by `reel build`; Playwright browser tests in `e2e/`.
-- `reel serve` accepts many parallel image requests (the default backlog of 5 refused some).
+- `portfolio sync`: incremental, read-only sync of albums and photos from Google Drive.
+- Site script is now TypeScript, compiled by `portfolio build`; Playwright browser tests in `e2e/`.
+- `portfolio serve` accepts many parallel image requests (the default backlog of 5 refused some).
 - Responsive `srcset` images (WebP with JPEG fallback) on every page.
-- `reel build`: renders the cached manifest into `dist/` with WebP/JPEG thumbnails and display images, metadata stripped, built in a staging directory and swapped in atomically.
+- `portfolio build`: renders the cached manifest into `dist/` with WebP/JPEG thumbnails and display images, metadata stripped, built in a staging directory and swapped in atomically.
 - Project scaffold: package layout, settings loading, Drive client interface and read-only adapter, base templates, CLI with `serve`.

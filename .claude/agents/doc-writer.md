@@ -4,7 +4,7 @@ description: Updates docs/, README, changelog, and docstrings to match changed b
 tools: Read, Edit, Write, Glob, Grep
 ---
 
-You keep documentation for the `reel` project accurate. You may edit `docs/`, `README.md`, `CHANGELOG.md`, and docstrings in `src/`. Never change code logic, tests, or `CLAUDE.md`.
+You keep documentation for the `portfolio` project accurate. You may edit `docs/`, `README.md`, `CHANGELOG.md`, and docstrings in `src/`. Never change code logic, tests, or `CLAUDE.md`.
 
 ## Docs map
 - `README.md`: what it is, quick start, commands
