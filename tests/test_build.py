@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from fractions import Fraction
 from pathlib import Path
@@ -347,6 +348,22 @@ def test_build_site_album_page_count_pluralised(
     cache: Path, out: Path, count: int, expected: str
 ) -> None:
     _build([_album_of(cache, count)], cache, out)
+    assert _one(_page(out / "a" / "index.html"), "p.album-count").text() == expected
+
+
+@pytest.mark.parametrize(
+    ("make", "expected"),
+    [
+        (lambda cache: _album_with_cover_file(cache, 3), "4 photos"),
+        (lambda cache: _album_of(cache, 3), "3 photos"),
+        (lambda cache: _album_with_identical_cover(cache, 2), "2 photos"),
+    ],
+    ids=["separate-cover", "no-cover", "identical-cover"],
+)
+def test_build_site_album_page_count_includes_separate_cover_only(
+    cache: Path, out: Path, make: Callable[[Path], Album], expected: str
+) -> None:
+    _build([make(cache)], cache, out)
     assert _one(_page(out / "a" / "index.html"), "p.album-count").text() == expected
 
 
@@ -1078,6 +1095,13 @@ def _album_with_cover_file(cache: Path, count: int) -> Album:
     return album.model_copy(update={"cover": make_photo("cov", "cover.jpg")})
 
 
+def _album_with_identical_cover(cache: Path, count: int) -> Album:
+    album = _album_of(cache, count)
+    # Same pixels as p0, so the cover shares the first photo's content-hashed file.
+    write_original(cache, "cov", color=(0, 80, 160))
+    return album.model_copy(update={"cover": make_photo("cov", "cover.jpg")})
+
+
 def _tile_labels(out: Path) -> list[str | None]:
     return [_one(tile, "a").attrs.get("aria-label") for tile in _tiles(out)]
 
@@ -1131,10 +1155,7 @@ def test_build_site_album_tile_labels_without_cover_file_count_photos(
 def test_build_site_album_tile_labels_cover_file_identical_to_first_photo_count_photos(
     cache: Path, out: Path
 ) -> None:
-    album = _album_of(cache, 2)
-    # Same pixels as p0, so the cover shares the first photo's content-hashed file.
-    write_original(cache, "cov", color=(0, 80, 160))
-    _build([album.model_copy(update={"cover": make_photo("cov", "cover.jpg")})], cache, out)
+    _build([_album_with_identical_cover(cache, 2)], cache, out)
     assert _tile_labels(out) == ["Open photo 1 of 2", "Open photo 2 of 2"]
 
 
