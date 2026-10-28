@@ -7,6 +7,9 @@ on:
     # Hourly keeps a private repo well inside the free Actions minutes.
     - cron: "0 * * * *"
   workflow_dispatch:
+  # Sent by the Vercel function api/drive-webhook.mjs when Drive reports a change.
+  repository_dispatch:
+    types: [drive-changed]
 
 permissions:
   contents: read
@@ -18,6 +21,7 @@ concurrency:
 jobs:
   deploy:
     # workflow_dispatch can target any branch; only main goes to production.
+    # repository_dispatch always runs on the default branch, which must be main.
     if: github.ref == 'refs/heads/main'
     # Secrets and variables live in the "production" environment.
     environment: production
@@ -77,7 +81,8 @@ jobs:
         id: changes
         run: |
           # Also compare the commit, so a failed code deploy is retried by the next schedule.
-          if [ "$GITHUB_EVENT_NAME" = "schedule" ] \
+          # Drive also notifies about changes outside the portfolio, so dispatches skip too.
+          if { [ "$GITHUB_EVENT_NAME" = "schedule" ] || [ "$GITHUB_EVENT_NAME" = "repository_dispatch" ]; } \
             && cmp -s .cache/manifest.json "$RUNNER_TEMP/manifest.prev.json" \
             && [ "$(cat .cache/deployed-sha 2>/dev/null)" = "$GITHUB_SHA" ]; then
             echo "No Drive changes; skipping build and deploy."
@@ -109,3 +114,14 @@ jobs:
         with:
           path: .cache
           key: portfolio-cache-${{ github.run_id }}
+
+      # `portfolio subscribe` opens a 3-hour channel; hourly renewal keeps one live even
+      # after a late cron or a failed sync/deploy (the key file is written before sync).
+      - name: Renew Drive webhook
+        if: ${{ !cancelled() && github.event_name == 'schedule' && vars.DRIVE_WEBHOOK_URL != '' }}
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-sa.json
+          DRIVE_WEBHOOK_URL: ${{ vars.DRIVE_WEBHOOK_URL }}
+          DRIVE_WEBHOOK_TOKEN: ${{ secrets.DRIVE_WEBHOOK_TOKEN }}
+        run: uv run portfolio subscribe
