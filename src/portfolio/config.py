@@ -76,6 +76,22 @@ def load_site_settings(
     return SiteSettings(**_site_values(_merged_values(env_file, environ)))
 
 
+def load_webhook_settings(
+    env_file: Path = Path(".env"), environ: Mapping[str, str] | None = None
+) -> tuple[str, str]:
+    """Return `(DRIVE_WEBHOOK_URL, DRIVE_WEBHOOK_TOKEN)`; raise ConfigError if unusable."""
+    values = _merged_values(env_file, environ)
+    names = ("DRIVE_WEBHOOK_URL", "DRIVE_WEBHOOK_TOKEN")
+    missing = [name for name in names if not values.get(name)]
+    if missing:
+        raise ConfigError(f"Missing required settings: {', '.join(missing)}. See .env.example.")
+    url, token = values["DRIVE_WEBHOOK_URL"], values["DRIVE_WEBHOOK_TOKEN"]
+    # Never echo the values: the token is a secret.
+    if not is_valid_form_url(url):
+        raise ConfigError("DRIVE_WEBHOOK_URL must be an https:// URL.")
+    return url, token
+
+
 def _merged_values(env_file: Path, environ: Mapping[str, str] | None) -> dict[str, str]:
     values = parse_env_file(env_file.read_text(encoding="utf-8")) if env_file.is_file() else {}
     values.update(os.environ if environ is None else environ)
