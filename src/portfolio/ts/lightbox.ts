@@ -8,7 +8,13 @@
     event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
 
   const setUpLightbox = (dialog: HTMLDialogElement): void => {
-    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[data-lightbox]"));
+    const openers = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[data-lightbox]"));
+    // The cover is left out when a tile shows the same photo; clicking it opens that tile's photo.
+    const links = openers.filter(
+      (link) =>
+        !link.matches(".album-hero-link") ||
+        !openers.some((other) => other !== link && other.href === link.href),
+    );
     const image = dialog.querySelector<HTMLImageElement>(".lightbox-image");
     const counter = dialog.querySelector<HTMLElement>(".lightbox-counter");
     const closeButton = dialog.querySelector<HTMLButtonElement>(".lightbox-close");
@@ -37,11 +43,12 @@
       if (image.complete) markLoaded();
     };
 
-    links.forEach((link, index) => {
-      link.addEventListener("click", (event: MouseEvent) => {
+    openers.forEach((opener) => {
+      opener.addEventListener("click", (event: MouseEvent) => {
         if (hasModifier(event) || event.button !== 0) return;
         event.preventDefault();
-        show(index);
+        const index = links.indexOf(opener);
+        show(index >= 0 ? index : links.findIndex((link) => link.href === opener.href));
         dialog.showModal();
       });
     });

@@ -460,10 +460,14 @@ def _album_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
         }
         for photo, shape in zip(album.photos, mosaic_shapes(len(album.photos)), strict=True)
     ]
+    cover_href = image_url(base_path, album.cover.display.jpeg_name)
     return {
         "title": album.title,
         "count": photo_count(len(album.photos)),
         "cover": _cover_context(album, base_path),
+        "cover_href": cover_href,
+        # A separate cover file opens first in the lightbox, so tiles count from 2 of n+1.
+        "photo_offset": 0 if any(photo["href"] == cover_href for photo in photos) else 1,
         "photos": photos,
     }
 

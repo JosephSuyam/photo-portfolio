@@ -284,8 +284,9 @@ html:has(.scenes) { scroll-snap-type: y mandatory; }
   z-index: 1;
 }
 
-.scene-title,
-.album-heading { font-size: 9vw; }
+.scene-title { font-size: 9vw; }
+
+.album-heading { font-size: 5vw; }
 
 .scene-count,
 .album-count {
@@ -308,12 +309,33 @@ html:has(.scenes) { scroll-snap-type: y mandatory; }
   text-shadow: var(--overlay-shadow);
 }
 
+.album-hero-link {
+  position: absolute;
+  inset: 0;
+  display: block;
+  cursor: zoom-in;
+}
+
+/* As for scenes, the photo covers the link's own outline, so the ring is drawn above it. */
+.album-hero-link:focus-visible { outline: none; }
+
+.album-hero-link:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  outline: 2px solid #fff;
+  outline-offset: -8px;
+}
+
+/* Clicks on the title fall through to the cover link. */
 .album-hero-text {
   position: absolute;
   right: 40px;
   bottom: 48px;
   left: 40px;
   z-index: 1;
+  pointer-events: none;
 }
 
 /* Tile spans match MOSAIC_TILES in build.py (its widths and aspects follow from them); its
@@ -689,8 +711,9 @@ html:has(.lightbox[open]) { overflow: hidden; }
   .scene-text,
   .album-hero-text { right: 20px; bottom: 20px; left: 20px; }
 
-  .scene-title,
-  .album-heading { font-size: 14vw; }
+  .scene-title { font-size: 14vw; }
+
+  .album-heading { font-size: 9vw; }
 
   .mosaic { --columns: 1; }
 

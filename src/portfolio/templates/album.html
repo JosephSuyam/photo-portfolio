@@ -4,7 +4,9 @@
 {% block title %}{{ album.title }} | {{ site_title }}{% endblock %}
 {% block content %}
 <section class="album-hero">
-  {{ picture(album.cover, eager=true) }}
+  <a class="album-hero-link" href="{{ album.cover_href }}" data-lightbox aria-label="Open cover photo of {{ album.title }}">
+    {{ picture(album.cover, eager=true) }}
+  </a>
   <div class="album-hero-text">
     <h1 class="album-heading">{{ album.title }}</h1>
     <p class="album-count">{{ album.count }}</p>
@@ -13,7 +15,7 @@
 <ul class="mosaic">
   {% for photo in album.photos %}
   <li class="tile tile--{{ photo.shape }}">
-    <a href="{{ photo.href }}" data-lightbox aria-label="Open photo {{ loop.index }} of {{ loop.length }}">
+    <a href="{{ photo.href }}" data-lightbox aria-label="Open photo {{ loop.index + album.photo_offset }} of {{ loop.length + album.photo_offset }}">
       <picture>
         <source srcset="{{ photo.webp_srcset }}" sizes="{{ photo.sizes }}" type="image/webp">
         <img src="{{ photo.src }}" srcset="{{ photo.jpeg_srcset }}" sizes="{{ photo.sizes }}"
