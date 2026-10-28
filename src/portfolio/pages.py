@@ -21,6 +21,9 @@ EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 _URL_SCHEMES = frozenset({"https", "http"})
 _MAX_REPORTED_ERRORS = 3
+# json's own recursion limit depends on the Python version and the C stack, so we cap depth.
+_MAX_JSON_DEPTH = 32
+_JSON_STRING = re.compile(r'"(?:[^"\\]|\\.)*"', re.DOTALL)
 # JSON has no comments, so unknown keys such as "_comment" are ignored rather than rejected.
 _PAGE_FILE_CONFIG = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
@@ -135,15 +138,15 @@ def parse_contact(text: str, name: str = "contact.json") -> ContactPage | None:
 
 
 def _load_page_file[M: BaseModel](model: type[M], text: str, name: str) -> M | None:
+    if _nesting_depth(text) > _MAX_JSON_DEPTH:
+        logger.warning("Skipping %r: not valid JSON (nested too deeply)", name)
+        return None
     try:
         data = json.loads(text)
     except json.JSONDecodeError as error:
         logger.warning(
             "Skipping %r: not valid JSON (line %d, column %d)", name, error.lineno, error.colno
         )
-        return None
-    except RecursionError:
-        logger.warning("Skipping %r: not valid JSON (nested too deeply)", name)
         return None
     except ValueError:
         # Python refuses integers longer than its digit limit; the message would echo them.
@@ -154,6 +157,18 @@ def _load_page_file[M: BaseModel](model: type[M], text: str, name: str) -> M | N
     except ValidationError as error:
         logger.warning("Skipping %r: %s", name, _describe_errors(error))
         return None
+
+
+def _nesting_depth(text: str) -> int:
+    """The deepest `[`/`{` nesting outside JSON strings, counted without parsing."""
+    depth = deepest = 0
+    for char in _JSON_STRING.sub('""', text):
+        if char in "[{":
+            depth += 1
+            deepest = max(deepest, depth)
+        elif char in "]}":
+            depth -= 1
+    return deepest
 
 
 def _describe_errors(error: ValidationError) -> str:
