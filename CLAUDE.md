@@ -10,11 +10,11 @@ A photographer portfolio, generated from a Google Drive folder: root = portfolio
 ## Commands (single source of truth; agents and skills refer here)
 - Install: `uv sync && npm install` | Format: `uv run ruff format .`
 - One test: `uv run pytest -k "<name>"` | `npx playwright test -g "<name>"`
-- Site: `uv run portfolio sync` / `build` / `serve` (localhost:8000); `portfolio all` = sync + build; `portfolio watch` rebuilds on change with live reload
+- Site: `uv run portfolio sync` / `build` / `serve` (localhost:8000); `portfolio all` = sync + build; `portfolio watch` rebuilds on change with live reload; `portfolio subscribe` renews the Drive change webhook
 - Ports: 8000 is the user's preview server (don't take it over or stop it unless asked); Playwright uses 8123.
 
 ## Configuration
-`.env` (never committed; shape in `.env.example`): `GOOGLE_APPLICATION_CREDENTIALS`, `DRIVE_ROOT_FOLDER_ID`, `SITE_TITLE`, `SITE_BASE_URL`, optional `CONTACT_FORM_URL` (https form endpoint; unset = no form). Real env vars override it; VS Code injects `.env` at startup, so restart it after edits. Root folder shared (Viewer) with the service account; scope `drive.readonly`. The path in `SITE_BASE_URL` becomes the site's base path (e.g. `/portfolio/`).
+`.env` (never committed; shape in `.env.example`): `GOOGLE_APPLICATION_CREDENTIALS`, `DRIVE_ROOT_FOLDER_ID`, `SITE_TITLE`, `SITE_BASE_URL`, optional `CONTACT_FORM_URL` (https form endpoint; unset = no form), optional `DRIVE_WEBHOOK_URL` + `DRIVE_WEBHOOK_TOKEN` (for `subscribe`; setup in `docs/setup.md`). Real env vars override it; VS Code injects `.env` at startup, so restart it after edits. Root folder shared (Viewer) with the service account; scope `drive.readonly`. The path in `SITE_BASE_URL` becomes the site's base path (e.g. `/portfolio/`).
 
 ## Drive conventions
 - Albums: immediate subfolders of the root, natural sort by name ("Book 2" before "Book 10"); a numeric prefix (`01 Book I`) forces order. Deeper nesting ignored; empty albums unpublished.
