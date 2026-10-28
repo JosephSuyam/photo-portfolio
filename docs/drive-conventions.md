@@ -21,7 +21,7 @@ Portfolio/            <- root folder (DRIVE_ROOT_FOLDER_ID)
 - Photos are ordered by filename, naturally, and the album page shows them in that order in justified rows: each photo whole at its own aspect ratio, never cropped. Panoramas take more of a row, portraits less.
 - The cover is a file named `cover.*`, otherwise the first photo. The index crops it to fill its frame (21:9 for the featured album, 3:2 for cards, 3:1 for a lone last card, 4:5 for the feature on phones), and the album title is set over its lower edge, so keep the subject near the center and clear of the bottom-left.
 - Supported: JPEG, PNG, WebP. Other files and shortcuts are skipped.
-- Each album's URL slug comes from its title ("01 Book I" -> `/01-book-i/`). If two albums share a slug, the later one gets `-2`, `-3`, and so on. `work`, `static`, `images`, `about`, and `contact` belong to the site, so an album folder named "About" gets `/about-2/` and "Contact" gets `/contact-2/`.
+- Each album's URL slug comes from its title ("01 Book I" -> `/01-book-i/`). If two albums share a slug, the later one gets `-2`, `-3`, and so on. `work`, `static`, `images`, `about`, `contact`, and `api` belong to the site, so an album folder named "About" gets `/about-2/` and "Contact" gets `/contact-2/`.
 - Empty albums are not published.
 - The root folder can live in My Drive or in a shared drive.
 

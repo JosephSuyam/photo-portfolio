@@ -33,10 +33,11 @@ dist/
   images/<hash>.webp|.jpg       thumbnails (600px wide) and display images (2000px long edge)
   static/                       site.css, compiled JavaScript (theme.js, album-preview.js, lightbox.js)
   static/fonts/                 bodoni-moda-latin.woff2 and its licence, OFL.txt
+  api/drive-webhook.mjs         Vercel function for instant redeploys (see setup.md)
   .portfolio-build                   marker: this directory was written by `portfolio build`
 ```
 
-- Slugs must be lowercase letters and digits with single hyphens, unique, and not `work`, `static`, `images`, `about`, or `contact`; otherwise the build fails.
+- Slugs must be lowercase letters and digits with single hyphens, unique, and not `work`, `static`, `images`, `about`, `contact`, or `api`; otherwise the build fails.
 - A photo that can't be decoded is skipped with a warning. A page file that is too large, not UTF-8, not valid JSON, or the wrong shape leaves its page out with a warning. A missing original fails the build.
 - The site is built in `.dist.staging/` and swapped in only on success, so a failed build leaves the previous `dist/` as it was. Build refuses to replace a non-empty `dist/` without the `.portfolio-build` marker.
 - Derived images carry no EXIF or other source metadata (only the ICC color profile).
