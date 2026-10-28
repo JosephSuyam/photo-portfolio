@@ -20,7 +20,7 @@ The look follows [reel.format.com](https://reel.format.com/): white or black the
 
 While editing templates, CSS, or TypeScript, `uv run portfolio watch` rebuilds on every change and reloads open pages. Add `--port 8000` if `portfolio serve` isn't already running.
 
-`uv run portfolio subscribe` points Drive change notifications at the deployed site for 3 hours, for instant redeploys (see [Setup](docs/setup.md#instant-redeploy-on-drive-changes-optional)).
+`uv run portfolio subscribe` points Drive change notifications at the deployed site for 24 hours, for instant redeploys (see [Setup](docs/setup.md#instant-redeploy-on-drive-changes-optional)).
 
 `serve` options:
 
