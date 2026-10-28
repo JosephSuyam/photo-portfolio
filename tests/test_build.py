@@ -479,6 +479,12 @@ def test_build_site_untrusted_title_escaped_in_album_hero(cache: Path, out: Path
     assert _one(page, "section.album-hero h1.album-heading").text() == PAYLOAD_TITLE
 
 
+def test_build_site_untrusted_title_escaped_in_hero_link_label(cache: Path, out: Path) -> None:
+    _build(_untrusted_albums(cache), cache, out)
+    link = _one(_page(out / "a" / "index.html"), "a.album-hero-link")
+    assert link.attrs.get("aria-label") == f"Open cover photo of {PAYLOAD_TITLE}"
+
+
 @pytest.mark.parametrize("direction", ["prev", "next"])
 def test_build_site_untrusted_title_escaped_in_pager(
     cache: Path, out: Path, direction: str
@@ -1064,6 +1070,72 @@ def test_build_site_album_hero_sizes_follow_cover_aspect(cache: Path, out: Path)
     write_original(cache, "p1", size=(1200, 400))
     _build([make_album("a", [make_photo("p1")])], cache, out)
     assert _one(_hero(out), "img").attrs.get("sizes") == "(max-width: 767px) 534vw, 169vw"
+
+
+def _album_with_cover_file(cache: Path, count: int) -> Album:
+    album = _album_of(cache, count)
+    write_original(cache, "cov", color=(0, 0, 255), size=(1200, 800))
+    return album.model_copy(update={"cover": make_photo("cov", "cover.jpg")})
+
+
+def _tile_labels(out: Path) -> list[str | None]:
+    return [_one(tile, "a").attrs.get("aria-label") for tile in _tiles(out)]
+
+
+def test_build_site_album_hero_link_opens_cover_file_display_jpeg_with_base_path(
+    cache: Path, out: Path, tmp_path: Path
+) -> None:
+    album = _album_with_cover_file(cache, 2)
+    expected = _expected(cache / "originals" / "cov", tmp_path / "scratch")
+    _build([album], cache, out, base_path="/portfolio/")
+    link = _one(_hero(out), "a.album-hero-link")
+    assert link.attrs.get("href") == f"/portfolio/images/{expected.display.jpeg_name}"
+
+
+def test_build_site_album_hero_link_is_labelled_lightbox_link(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 2)], cache, out)
+    attrs = _one(_hero(out), "a.album-hero-link").attrs
+    assert (attrs.get("aria-label"), "data-lightbox" in attrs) == (
+        "Open cover photo of Book One",
+        True,
+    )
+
+
+def test_build_site_album_hero_link_wraps_cover_picture(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 2)], cache, out)
+    assert len(_one(_hero(out), "a.album-hero-link").find_all("picture img")) == 1
+
+
+def test_build_site_album_hero_link_without_cover_file_is_first_tile_link(
+    cache: Path, out: Path
+) -> None:
+    _build([_album_of(cache, 2)], cache, out)
+    first_tile_href = _one(_tiles(out)[0], "a").attrs.get("href")
+    assert _one(_hero(out), "a.album-hero-link").attrs.get("href") == first_tile_href
+
+
+def test_build_site_album_tile_labels_with_cover_file_count_cover_first(
+    cache: Path, out: Path
+) -> None:
+    _build([_album_with_cover_file(cache, 3)], cache, out)
+    assert _tile_labels(out) == ["Open photo 2 of 4", "Open photo 3 of 4", "Open photo 4 of 4"]
+
+
+def test_build_site_album_tile_labels_without_cover_file_count_photos(
+    cache: Path, out: Path
+) -> None:
+    _build([_album_of(cache, 3)], cache, out)
+    assert _tile_labels(out) == ["Open photo 1 of 3", "Open photo 2 of 3", "Open photo 3 of 3"]
+
+
+def test_build_site_album_tile_labels_cover_file_identical_to_first_photo_count_photos(
+    cache: Path, out: Path
+) -> None:
+    album = _album_of(cache, 2)
+    # Same pixels as p0, so the cover shares the first photo's content-hashed file.
+    write_original(cache, "cov", color=(0, 80, 160))
+    _build([album.model_copy(update={"cover": make_photo("cov", "cover.jpg")})], cache, out)
+    assert _tile_labels(out) == ["Open photo 1 of 2", "Open photo 2 of 2"]
 
 
 # build_site: next-album banner

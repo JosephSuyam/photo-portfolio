@@ -1222,6 +1222,81 @@ test.describe("album page", () => {
   });
 });
 
+function heroLink(page: Page, album: (typeof ALBUMS)[number]): Locator {
+  return page.getByRole("link", { name: `Open cover photo of ${album.title}`, exact: true });
+}
+
+test.describe("album hero cover link", () => {
+  /** FIRST_ALBUM has a separate cover.* file, so the viewer shows it before the photos. */
+  const coverFileTotal = FIRST_ALBUM.photos + 1;
+
+  test("clicking the hero opens the viewer on the cover file", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    await heroLink(page, FIRST_ALBUM).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1, coverFileTotal));
+  });
+
+  test("with a cover file, a tile opens one past its position", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    await photoLinks(page).first().click();
+    await expect(lightboxCounter(page)).toHaveText(counter(2, coverFileTotal));
+  });
+
+  test("clicking the album title opens the viewer on the cover", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    const heading = await boxOf(page.locator("h1.album-heading"));
+    await page.mouse.click(heading.x + heading.width / 2, heading.y + heading.height / 2);
+    await expect(lightboxCounter(page)).toHaveText(counter(1, coverFileTotal));
+  });
+
+  test("closing after opening from the hero returns focus to the hero", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    await heroLink(page, FIRST_ALBUM).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1, coverFileTotal));
+    await page.keyboard.press("Escape");
+    await expect(heroLink(page, FIRST_ALBUM)).toBeFocused();
+  });
+
+  test("without a cover file, the hero opens the first photo once", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    await heroLink(page, LANDSCAPES).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1));
+  });
+
+  test("without a cover file, closing after opening from the hero focuses the first tile", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    await heroLink(page, LANDSCAPES).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1));
+    await page.keyboard.press("Escape");
+    await expect(photoLinks(page).first()).toBeFocused();
+  });
+
+  test("without a cover file, the hero shows the first tile's image", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const href = await photoLinks(page).first().evaluate((link: HTMLAnchorElement) => link.href);
+    await heroLink(page, LANDSCAPES).click();
+    await expect.poll(() => lightboxImageSrc(page)).toBe(href);
+  });
+
+  test("without a cover file, Next from the hero shows the second photo", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const href = await photoLinks(page).nth(1).evaluate((link: HTMLAnchorElement) => link.href);
+    await heroLink(page, LANDSCAPES).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1));
+    await lightbox(page).getByRole("button", { name: "Next photo", exact: true }).click();
+    await expect.poll(() => lightboxImageSrc(page)).toBe(href);
+  });
+
+  test("album title is smaller than an index scene title", async ({ page }) => {
+    const fontSize = (locator: Locator) =>
+      locator.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    await page.goto("/work/");
+    const sceneTitle = await fontSize(page.locator(".scene-title").first());
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    expect(await fontSize(page.locator("h1.album-heading"))).toBeLessThan(sceneTitle);
+  });
+});
+
 test.describe("single-photo album", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(`/${SINGLE_PHOTO_ALBUM.slug}/`);
