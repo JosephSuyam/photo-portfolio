@@ -34,7 +34,7 @@ The form posts `name`, `email`, and `message`, plus an empty hidden honeypot fie
 
 ## Instant redeploy on Drive changes (optional)
 
-Without this, the Deploy workflow picks up Drive changes on its hourly schedule. With it, a Drive change redeploys within about a minute: Drive push channel -> Vercel function `/api/drive-webhook` (built from `src/portfolio/api/drive-webhook.mjs` into `dist/api/`) -> GitHub `repository_dispatch` event `drive-changed` -> Deploy workflow. Every Deploy run (push, manual, dispatch, or the hourly schedule, which stays as a fallback) renews the channel with `portfolio subscribe`; each channel lasts 24 hours, so it survives long gaps in GitHub's schedule.
+Without this, the Deploy workflow picks up Drive changes on its hourly schedule. With it, a Drive change redeploys within about a minute: Drive push channel -> Vercel function `/api/drive-webhook` (built from `src/portfolio/api/drive-webhook.mjs` into `dist/api/`) -> GitHub `repository_dispatch` event `drive-changed` -> Deploy workflow. Every push, manual, or scheduled Deploy run (the hourly schedule stays as a fallback; webhook-triggered runs skip this) renews the channel with `portfolio subscribe`; each channel lasts 24 hours, so it survives long gaps in GitHub's schedule.
 
 1. Generate a random token of at most 256 characters, e.g. `openssl rand -hex 32`.
 2. Create a fine-grained GitHub personal access token for this repository only, with **Contents: Read and write**.

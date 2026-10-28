@@ -115,14 +115,14 @@ jobs:
           path: .cache
           key: portfolio-cache-${{ github.run_id }}
 
-      # `portfolio subscribe` opens a 24-hour channel. Every run renews it, so one stays live
-      # through hours-long cron gaps and after a failed sync/deploy (the key file is written
-      # before sync). Overlapping channels only send duplicate notifications, which collapse
-      # because `concurrency` keeps one pending run (newer ones cancel it) and the
-      # skip-if-unchanged check. Opening a channel changes no Drive
-      # file, and the webhook ignores its "sync" message, so dispatch runs cannot loop.
+      # `portfolio subscribe` opens a 24-hour channel. Every run except webhook-triggered ones
+      # renews it, so one stays live through hours-long cron gaps and after a failed
+      # sync/deploy (the key file is written before sync). Dispatch runs skip it so channels
+      # don't pile up with each Drive change. Overlapping channels only send duplicate
+      # notifications, which collapse because `concurrency` keeps one pending run (newer ones
+      # cancel it) and the skip-if-unchanged check.
       - name: Renew Drive webhook
-        if: ${{ !cancelled() && vars.DRIVE_WEBHOOK_URL != '' }}
+        if: ${{ !cancelled() && vars.DRIVE_WEBHOOK_URL != '' && github.event_name != 'repository_dispatch' }}
         continue-on-error: true
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-sa.json
