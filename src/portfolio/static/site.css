@@ -74,7 +74,15 @@ main { flex: 1; }
 
 a { color: inherit; text-decoration: none; }
 
-img { display: block; }
+/* Download deterrent: no drag-to-desktop, selection, or iOS long-press "Save to Photos". */
+img {
+  display: block;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+a[data-lightbox] { -webkit-touch-callout: none; }
 
 a:focus-visible,
 button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }

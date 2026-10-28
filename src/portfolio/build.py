@@ -425,11 +425,20 @@ def _link(album: PublishedAlbum) -> dict[str, str]:
     return {"title": album.title, "slug": album.slug}
 
 
+def _has_separate_cover(album: PublishedAlbum) -> bool:
+    """True when the cover is not one of the album photos (names are content hashes)."""
+    return all(photo.display.jpeg_name != album.cover.display.jpeg_name for photo in album.photos)
+
+
+def _album_count(album: PublishedAlbum) -> str:
+    return photo_count(len(album.photos) + int(_has_separate_cover(album)))
+
+
 def _index_context(albums: Sequence[PublishedAlbum], base_path: str) -> dict[str, object]:
     scenes = [
         {
             **_link(album),
-            "count": photo_count(len(album.photos)),
+            "count": _album_count(album),
             "cover": _cover_context(album, base_path),
         }
         for album in albums
@@ -460,14 +469,13 @@ def _album_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
         }
         for photo, shape in zip(album.photos, mosaic_shapes(len(album.photos)), strict=True)
     ]
-    cover_href = image_url(base_path, album.cover.display.jpeg_name)
     return {
         "title": album.title,
-        "count": photo_count(len(album.photos)),
+        "count": _album_count(album),
         "cover": _cover_context(album, base_path),
-        "cover_href": cover_href,
+        "cover_href": image_url(base_path, album.cover.display.jpeg_name),
         # A separate cover file opens first in the lightbox, so tiles count from 2 of n+1.
-        "photo_offset": 0 if any(photo["href"] == cover_href for photo in photos) else 1,
+        "photo_offset": int(_has_separate_cover(album)),
         "photos": photos,
     }
 
