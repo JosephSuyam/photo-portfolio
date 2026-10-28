@@ -39,6 +39,11 @@ TABLET_MAX_WIDTH_PX = 1024
 SCENE_ASPECT = Fraction(16, 9)
 PHONE_SCENE_ASPECT = Fraction(9, 16)
 
+# About and Contact photo, beside the text: half of a 16:9 window at full height; on a 9:16
+# phone a full-width band 56svh tall, roughly square. Keep in sync with `.split` in site.css.
+SPLIT_PHOTO_ASPECT = Fraction(8, 9)
+PHONE_SPLIT_PHOTO_ASPECT = Fraction(1)
+
 # Album page: a gap-free mosaic of cropped tiles on a 4-column grid (2 on tablets, 1 on phones).
 # Photos come in blocks of six that close a 4x3 area; a last partial block uses the remainder
 # shapes, which close too. Keep the shape spans in sync with site.css.
@@ -152,6 +157,17 @@ def cover_sizes(variant: ImageVariant) -> str:
     return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) {phone}vw, {desktop}vw"
 
 
+def split_photo_sizes(variant: ImageVariant) -> str:
+    """`sizes` value for an About or Contact photo cropped to fill its half of the split layout.
+
+    The box is half the window wide at SPLIT_PHOTO_ASPECT, full width at
+    PHONE_SPLIT_PHOTO_ASPECT on phones.
+    """
+    phone = _cropped_width_vw(variant, 100, PHONE_SPLIT_PHOTO_ASPECT)
+    desktop = _cropped_width_vw(variant, 50, SPLIT_PHOTO_ASPECT)
+    return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) {phone}vw, {desktop}vw"
+
+
 def _cropped_width_vw(variant: ImageVariant, box_width_vw: int, box_aspect: Fraction) -> int:
     """Rendered width of a photo cropped to fill a box; wider photos overflow at the sides."""
     # Fraction keeps exact multiples exact; floats can push them just past an integer.
@@ -222,7 +238,8 @@ def build_site(
     JavaScript files in `scripts_dir` (compiled from `src/portfolio/ts/`) are copied to `static/`
     and loaded on every page. Without them the site still works, minus the enhancements.
     About and Contact pages are written only when their text files are usable; the Contact
-    page gets a form posting to `contact_form_url` when one is given.
+    page gets a form posting to `contact_form_url` when one is given. A page with a usable
+    photo (`about_photo`, `contact_photo`) gets the split layout; a page not written ignores it.
     """
     validate_slugs(manifest.albums)
     about = _load_page(manifest.about, cache_dir, parse_about)
@@ -237,6 +254,17 @@ def build_site(
     try:
         _remove(staging)
         published = _publish_albums(manifest.albums, cache_dir, staging / IMAGES_DIR)
+        # A page that is not rendered has no use for its photo.
+        about_photo = (
+            _process_page_photo(manifest.about_photo, cache_dir, staging / IMAGES_DIR)
+            if about is not None
+            else None
+        )
+        contact_photo = (
+            _process_page_photo(manifest.contact_photo, cache_dir, staging / IMAGES_DIR)
+            if contact is not None
+            else None
+        )
         _render_site(
             published,
             staging,
@@ -246,6 +274,8 @@ def build_site(
             about=about,
             contact=contact,
             contact_form_url=contact_form_url,
+            about_photo=about_photo,
+            contact_photo=contact_photo,
         )
         shutil.copytree(STATIC_DIR, staging / "static")
         shutil.copytree(API_DIR, staging / "api")
@@ -328,20 +358,39 @@ def _publish_albums(
 def _process(
     album: Album, photo: Photo, cache_dir: Path, images_dir: Path
 ) -> ProcessedPhoto | None:
-    try:
-        source = original_path(cache_dir, photo.file_id)
-    except ValueError as error:
-        raise BuildError(f"Album {album.name!r}, photo {photo.name!r}: {error}") from error
-    if not source.is_file():
-        raise BuildError(
-            f"Album {album.name!r}, photo {photo.name!r} is missing from {source.parent}. "
-            "Run `portfolio sync` again."
-        )
+    source = _cached_original(
+        f"Album {album.name!r}, photo {photo.name!r}", photo.file_id, cache_dir
+    )
     try:
         return process_photo(source, images_dir)
     except ImageError as error:
         logger.warning("Skipping photo %r in album %r: %s", photo.name, album.name, error)
         return None
+
+
+def _process_page_photo(
+    photo: Photo | None, cache_dir: Path, images_dir: Path
+) -> ProcessedPhoto | None:
+    """The About or Contact photo, processed; None if there is none or it is unusable."""
+    if photo is None:
+        return None
+    source = _cached_original(repr(photo.name), photo.file_id, cache_dir)
+    try:
+        return process_photo(source, images_dir)
+    except ImageError as error:
+        logger.warning("Skipping %r: %s", photo.name, error)
+        return None
+
+
+def _cached_original(label: str, file_id: str, cache_dir: Path) -> Path:
+    """Path of the cached original for `file_id`; BuildError (naming `label`) if unusable."""
+    try:
+        source = original_path(cache_dir, file_id)
+    except ValueError as error:
+        raise BuildError(f"{label}: {error}") from error
+    if not source.is_file():
+        raise BuildError(f"{label} is missing from {source.parent}. Run `portfolio sync` again.")
+    return source
 
 
 def _load_page[T](
@@ -350,14 +399,7 @@ def _load_page[T](
     """Parsed page from the cached text file; None if there is none or it is unusable."""
     if text_file is None:
         return None
-    try:
-        source = original_path(cache_dir, text_file.file_id)
-    except ValueError as error:
-        raise BuildError(f"{text_file.name!r}: {error}") from error
-    if not source.is_file():
-        raise BuildError(
-            f"{text_file.name!r} is missing from {source.parent}. Run `portfolio sync` again."
-        )
+    source = _cached_original(repr(text_file.name), text_file.file_id, cache_dir)
     try:
         text = read_page_text(source, text_file.name)
     except OSError as error:
@@ -375,6 +417,8 @@ def _render_site(
     about: AboutPage | None,
     contact: ContactPage | None,
     contact_form_url: str | None,
+    about_photo: ProcessedPhoto | None,
+    contact_photo: ProcessedPhoto | None,
 ) -> None:
     environment = make_environment()
     common = {
@@ -412,11 +456,16 @@ def _render_site(
         _write_page(out_dir / album.slug / "index.html", html)
 
     if about is not None:
-        html = environment.get_template("about.html").render(**common, about=about)
+        html = environment.get_template("about.html").render(
+            **common, about=about, photo=_split_photo_context(about_photo, base_path)
+        )
         _write_page(out_dir / "about" / "index.html", html)
     if contact is not None:
         html = environment.get_template("contact.html").render(
-            **common, contact=contact, contact_form_url=contact_form_url
+            **common,
+            contact=contact,
+            contact_form_url=contact_form_url,
+            photo=_split_photo_context(contact_photo, base_path),
         )
         _write_page(out_dir / "contact" / "index.html", html)
 
@@ -452,6 +501,14 @@ def _cover_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
         base_path,
         fallback=album.cover.thumbnail,
         sizes_value=cover_sizes(album.cover.display),
+    )
+
+
+def _split_photo_context(photo: ProcessedPhoto | None, base_path: str) -> dict[str, object] | None:
+    if photo is None:
+        return None
+    return _image_context(
+        photo, base_path, fallback=photo.display, sizes_value=split_photo_sizes(photo.display)
     )
 
 

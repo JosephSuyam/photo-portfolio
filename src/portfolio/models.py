@@ -47,6 +47,8 @@ class Manifest(BaseModel):
     albums: list[Album]
     about: TextFile | None = None
     contact: TextFile | None = None
+    about_photo: Photo | None = None
+    contact_photo: Photo | None = None
 
 
 def original_path(cache_dir: Path, file_id: str) -> Path:

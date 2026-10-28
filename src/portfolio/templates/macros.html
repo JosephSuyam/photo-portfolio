@@ -6,3 +6,9 @@
        {% if not eager %}loading="lazy"{% endif %}>
 </picture>
 {% endmacro %}
+
+{# Without a photo the page keeps its centred layout; the markup is exactly the caller's. #}
+{% macro split_layout(photo) -%}
+{% if photo %}<div class="split"><figure class="split-photo">{{ picture(photo, eager=true) }}</figure><div class="split-text">{{ caller() }}</div></div>
+{%- else %}{{ caller() }}{% endif %}
+{%- endmacro %}
