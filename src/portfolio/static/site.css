@@ -284,8 +284,7 @@ html:has(.scenes) { scroll-snap-type: y mandatory; }
   z-index: 1;
 }
 
-.scene-title { font-size: 9vw; }
-
+.scene-title,
 .album-heading { font-size: 5vw; }
 
 .scene-count,
@@ -328,14 +327,13 @@ html:has(.scenes) { scroll-snap-type: y mandatory; }
   outline-offset: -8px;
 }
 
-/* Clicks on the title fall through to the cover link. */
+/* The caption sits above the cover link, so clicks on it do not open the cover. */
 .album-hero-text {
   position: absolute;
   right: 40px;
   bottom: 48px;
   left: 40px;
   z-index: 1;
-  pointer-events: none;
 }
 
 /* Tile spans match MOSAIC_TILES in build.py (its widths and aspects follow from them); its
@@ -711,8 +709,7 @@ html:has(.lightbox[open]) { overflow: hidden; }
   .scene-text,
   .album-hero-text { right: 20px; bottom: 20px; left: 20px; }
 
-  .scene-title { font-size: 14vw; }
-
+  .scene-title,
   .album-heading { font-size: 9vw; }
 
   .mosaic { --columns: 1; }
