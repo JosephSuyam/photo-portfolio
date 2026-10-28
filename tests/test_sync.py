@@ -1328,3 +1328,230 @@ def test_sync_portfolio_album_named_like_page_slug_suffixed(
 ) -> None:
     _one_album(drive, "p1", name=name)
     assert _sync(drive, cache_dir).albums[0].slug == slug
+
+
+# --- sync_portfolio: about.* and contact.* photos in the root ------------------------------
+
+
+def _root_photo(
+    drive: FakeDriveClient, file_id: str, name: str, mime_type: str = "image/jpeg"
+) -> None:
+    drive.add_file(ROOT, file_id, name, content=f"image-{file_id}".encode(), mime_type=mime_type)
+
+
+def _page_photo_id(manifest: Manifest, field: str) -> str | None:
+    photo = getattr(manifest, field)
+    return photo.file_id if photo else None
+
+
+def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [record.getMessage() for record in caplog.records if record.levelno >= logging.WARNING]
+
+
+@pytest.mark.parametrize(
+    ("field", "name", "mime_type"),
+    [
+        ("about_photo", "about.jpg", "image/jpeg"),
+        ("about_photo", "About.JPG", "image/jpeg"),
+        ("contact_photo", "contact.webp", "image/webp"),
+        ("contact_photo", "CONTACT.png", "image/png"),
+    ],
+)
+def test_sync_portfolio_page_photo_in_root_recorded_without_page_json(
+    drive: FakeDriveClient, cache_dir: Path, field: str, name: str, mime_type: str
+) -> None:
+    _one_album(drive, "p1")
+    _root_photo(drive, "i-page", name, mime_type)
+    assert _page_photo_id(_sync(drive, cache_dir), field) == "i-page"
+
+
+def test_sync_portfolio_page_photos_not_swapped(drive: FakeDriveClient, cache_dir: Path) -> None:
+    _root_photo(drive, "i-contact", "contact.jpg")
+    _root_photo(drive, "i-about", "about.jpg")
+    manifest = _sync(drive, cache_dir)
+    ids = (_page_photo_id(manifest, "about_photo"), _page_photo_id(manifest, "contact_photo"))
+    assert ids == ("i-about", "i-contact")
+
+
+@pytest.mark.parametrize("name", ["about-me.jpg", "aboutx.png", "my about.jpg", "about.old.jpg"])
+def test_sync_portfolio_page_photo_like_name_not_recorded(
+    drive: FakeDriveClient, cache_dir: Path, name: str
+) -> None:
+    _root_photo(drive, "i-other", name)
+    assert _sync(drive, cache_dir).about_photo is None
+
+
+@pytest.mark.parametrize(
+    ("name", "mime_type"),
+    [
+        ("about.json", "application/json"),
+        ("about.txt", "text/plain"),
+        ("contact.pdf", "application/pdf"),
+    ],
+)
+def test_sync_portfolio_page_photo_non_image_root_file_logs_no_warning(
+    drive: FakeDriveClient,
+    cache_dir: Path,
+    caplog: pytest.LogCaptureFixture,
+    name: str,
+    mime_type: str,
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _root_text(drive, "t-page", name, mime_type=mime_type)
+    _sync(drive, cache_dir)
+    assert _warnings(caplog) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "mime_type"),
+    [("about.gif", "image/gif"), ("about.jpg", SHORTCUT_MIME_TYPE)],
+)
+def test_sync_portfolio_page_photo_unsupported_type_warns(
+    drive: FakeDriveClient,
+    cache_dir: Path,
+    caplog: pytest.LogCaptureFixture,
+    name: str,
+    mime_type: str,
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _root_photo(drive, "i-about", name, mime_type)
+    _sync(drive, cache_dir)
+    assert _warned_about(caplog, f"Skipping {name!r}: unsupported type {mime_type}")
+
+
+@pytest.mark.parametrize(
+    ("file_id", "name", "mime_type"),
+    [
+        ("i-about", "about.gif", "image/gif"),
+        ("i-about", "about.jpg", SHORTCUT_MIME_TYPE),
+        ("../about", "about.jpg", "image/jpeg"),
+    ],
+    ids=["gif", "shortcut", "unsafe-id"],
+)
+def test_sync_portfolio_page_photo_unusable_not_recorded_or_downloaded(
+    drive: FakeDriveClient, cache_dir: Path, file_id: str, name: str, mime_type: str
+) -> None:
+    _root_photo(drive, file_id, name, mime_type)
+    manifest = _sync(drive, cache_dir)
+    assert (manifest.about_photo, drive.downloads) == (None, [])
+
+
+def test_sync_portfolio_page_photo_unusable_first_does_not_hide_usable(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_photo(drive, "i-gif", "about.gif", "image/gif")
+    _root_photo(drive, "i-jpg", "about.jpg")
+    assert _page_photo_id(_sync(drive, cache_dir), "about_photo") == "i-jpg"
+
+
+def test_sync_portfolio_page_photo_duplicate_first_in_natural_order_wins(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_photo(drive, "i-webp", "about.webp", "image/webp")
+    _root_photo(drive, "i-jpg", "About.jpg")
+    assert _page_photo_id(_sync(drive, cache_dir), "about_photo") == "i-jpg"
+
+
+def test_sync_portfolio_page_photo_duplicate_warns_about_extra(
+    drive: FakeDriveClient, cache_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    _root_photo(drive, "i-webp", "contact.webp", "image/webp")
+    _root_photo(drive, "i-jpg", "contact.jpg")
+    _sync(drive, cache_dir)
+    assert _warned_about(caplog, "Skipping 'contact.webp': using an earlier contact photo instead")
+
+
+def test_sync_portfolio_page_photo_duplicate_extra_not_downloaded(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_photo(drive, "i-webp", "about.webp", "image/webp")
+    _root_photo(drive, "i-jpg", "about.jpg")
+    _sync(drive, cache_dir)
+    assert drive.downloads == ["i-jpg"]
+
+
+def test_sync_portfolio_page_photo_downloaded_to_originals(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_photo(drive, "i-about", "about.jpg")
+    _sync(drive, cache_dir)
+    assert original_path(cache_dir, "i-about").read_bytes() == b"image-i-about"
+
+
+def test_sync_portfolio_page_photos_recorded_in_written_manifest(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_photo(drive, "i-about", "about.jpg")
+    _root_photo(drive, "i-contact", "contact.jpg")
+    manifest = _sync(drive, cache_dir)
+    assert load_manifest(cache_dir / MANIFEST_NAME) == manifest
+
+
+def test_sync_portfolio_page_photos_need_no_extra_listing(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _one_album(drive, "p1")
+    _root_photo(drive, "i-about", "about.jpg")
+    _root_photo(drive, "i-contact", "contact.jpg")
+    _sync(drive, cache_dir)
+    assert drive.listed == [ROOT, "f-book"]
+
+
+def test_sync_portfolio_unchanged_page_photo_not_downloaded_again(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_photo(drive, "i-about", "about.jpg")
+    _root_photo(drive, "i-contact", "contact.jpg")
+    _sync(drive, cache_dir)
+    drive.downloads.clear()
+    _sync(drive, cache_dir)
+    assert drive.downloads == []
+
+
+def test_sync_portfolio_page_photo_md5_changed_redownloaded(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_photo(drive, "i-about", "about.jpg")
+    _root_photo(drive, "i-contact", "contact.jpg")
+    _sync(drive, cache_dir)
+    drive.downloads.clear()
+    drive.update_file("i-contact", content=b"new", md5_checksum="new-md5")
+    _sync(drive, cache_dir)
+    assert drive.downloads == ["i-contact"]
+
+
+def test_sync_portfolio_page_photo_deleted_in_drive_original_removed(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_photo(drive, "i-about", "about.jpg")
+    _sync(drive, cache_dir)
+    drive.remove("i-about")
+    _sync(drive, cache_dir)
+    assert not original_path(cache_dir, "i-about").exists()
+
+
+def test_sync_portfolio_page_photo_deleted_in_drive_dropped_from_manifest(
+    drive: FakeDriveClient, cache_dir: Path
+) -> None:
+    _root_photo(drive, "i-contact", "contact.jpg")
+    _sync(drive, cache_dir)
+    drive.remove("i-contact")
+    _sync(drive, cache_dir)
+    assert load_manifest(cache_dir / MANIFEST_NAME).contact_photo is None
+
+
+def test_sync_portfolio_page_photo_deleted_but_manifest_write_fails_original_kept(
+    drive: FakeDriveClient, cache_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _root_photo(drive, "i-about", "about.jpg")
+    _sync(drive, cache_dir)
+    drive.remove("i-about")
+
+    def failing_replace(self: Path, target: Path) -> Path:
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(Path, "replace", failing_replace)
+    with pytest.raises(PermissionError):
+        _sync(drive, cache_dir)
+    assert original_path(cache_dir, "i-about").exists()

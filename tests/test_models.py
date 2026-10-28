@@ -79,3 +79,21 @@ def test_text_file_missing_modified_time_rejected() -> None:
         TextFile.model_validate(
             {"file_id": "t1", "name": "about.json", "mime_type": "application/json"}
         )
+
+
+@pytest.mark.parametrize("field", ["about_photo", "contact_photo"])
+def test_manifest_page_photos_default_to_none(field: str) -> None:
+    assert getattr(Manifest(albums=[]), field) is None
+
+
+@pytest.mark.parametrize("field", ["about_photo", "contact_photo"])
+def test_manifest_old_json_without_page_photos_validates_with_none(field: str) -> None:
+    manifest = Manifest.model_validate_json('{"albums": [], "about": null}')
+    assert getattr(manifest, field) is None
+
+
+def test_manifest_json_round_trip_preserves_page_photos() -> None:
+    manifest = Manifest(
+        albums=[], about_photo=make_photo("i-about"), contact_photo=make_photo("i-contact")
+    )
+    assert Manifest.model_validate_json(manifest.model_dump_json()) == manifest
