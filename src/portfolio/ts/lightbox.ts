@@ -45,7 +45,8 @@
 
     openers.forEach((opener) => {
       opener.addEventListener("click", (event: MouseEvent) => {
-        if (hasModifier(event) || event.button !== 0) return;
+        // Modified clicks open the viewer too, so they cannot open the raw image in a new tab.
+        if (event.button !== 0) return;
         event.preventDefault();
         const index = links.indexOf(opener);
         show(index >= 0 ? index : links.findIndex((link) => link.href === opener.href));
