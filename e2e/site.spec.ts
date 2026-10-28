@@ -313,7 +313,7 @@ test.describe("album index", () => {
   test("scenes show photo counts", async ({ page }) => {
     await page.goto("/work/");
     await expect(page.locator("section.scenes .scene-count")).toHaveText(
-      ALBUMS.map((album) => `${photoCount(album.photos)} — View album →`),
+      ALBUMS.map((album) => `${photoCount(album.photos + Number(album.hasCoverFile))} — View album →`),
     );
   });
 
@@ -1471,10 +1471,20 @@ test.describe("lightbox", () => {
   });
 
   for (const modifier of ["Control", "Meta"] as const) {
-    test(`${modifier}+click on a photo does not open the viewer`, async ({ page, context }) => {
-      context.on("page", (opened) => void opened.close());
+    test(`${modifier}+click on a photo opens the viewer without a new tab`, async ({
+      page,
+      context,
+    }) => {
+      // Edge reports a new tab asynchronously, so wait a bounded time for one instead of checking at once.
+      const newTab = context.waitForEvent("page", { timeout: 1000 }).then(
+        () => true,
+        () => false,
+      );
       await photoLinks(page).first().click({ modifiers: [modifier] });
-      await expect(lightbox(page)).toBeHidden();
+      expect({ newTab: await newTab, viewer: await lightbox(page).isVisible() }).toEqual({
+        newTab: false,
+        viewer: true,
+      });
     });
   }
 });
