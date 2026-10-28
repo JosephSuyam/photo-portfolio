@@ -1242,7 +1242,7 @@ test.describe("album hero cover link", () => {
     await expect(lightboxCounter(page)).toHaveText(counter(2, coverFileTotal));
   });
 
-  for (const selector of ["h1.album-heading", ".album-hero .album-count", ".album-hero-text"]) {
+  for (const selector of ["h1.album-heading", ".album-hero .album-count"]) {
     test(`clicking ${selector} does not open the viewer`, async ({ page }) => {
       await page.goto(`/${FIRST_ALBUM.slug}/`);
       const box = await boxOf(page.locator(selector));
@@ -1251,6 +1251,13 @@ test.describe("album hero cover link", () => {
       await expect(lightbox(page)).toBeHidden();
     });
   }
+
+  test("clicking the empty end of the caption strip opens the viewer on the cover", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    const caption = await boxOf(page.locator(".album-hero-text"));
+    await page.mouse.click(caption.x + caption.width - 2, caption.y + caption.height / 2);
+    await expect(lightboxCounter(page)).toHaveText(counter(1, coverFileTotal));
+  });
 
   test("clicking the cover above the caption opens the viewer on the cover", async ({ page }) => {
     await page.goto(`/${FIRST_ALBUM.slug}/`);
