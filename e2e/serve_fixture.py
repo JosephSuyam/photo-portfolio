@@ -5,8 +5,7 @@ Usage: uv run python e2e/serve_fixture.py --port 8123
 The fixture has six albums (the first with an explicit cover.* file) of gradient images in
 mixed orientations. "Landscapes" has eleven photos of mixed ratios, a mosaic block of six and a
 five-photo remainder. The fifth album has a very long title, to catch horizontal overflow.
-"Still Life", the last, has a single photo; with five cards after the feature it is the lone,
-full-width last card.
+"Still Life", the last, has a single photo, shown as one full-width mosaic tile.
 Every (size, colour) pair is unique, so no two photos share a content-hashed file.
 The root also has an about.json (a lede and two paragraphs) and a Contact.json (an email, a
 link, and a plain entry), and the contact page gets a form posting to a fake https URL that
