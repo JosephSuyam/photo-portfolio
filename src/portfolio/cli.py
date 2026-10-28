@@ -174,15 +174,16 @@ def _rebuild(session: WatchSession, changes: list[Path] | None) -> None:
         typer.echo("Build failed; dist/ still has the last good site.", err=True)
 
 
-WEBHOOK_TTL_SECONDS = 3 * 60 * 60
+# Drive allows changes.watch channels up to one week (files.watch: one day).
+WEBHOOK_TTL_SECONDS = 24 * 60 * 60
 
 
 @app.command()
 def subscribe() -> None:
-    """Point Drive change notifications at DRIVE_WEBHOOK_URL for the next three hours.
+    """Point Drive change notifications at DRIVE_WEBHOOK_URL for the next 24 hours.
 
-    Run it more often than that (the deploy workflow renews it hourly) to keep one live
-    channel; the spare hour covers a late or failed scheduled run.
+    Every deploy workflow run renews it, so a channel stays live through long gaps
+    between scheduled runs.
     """
     try:
         settings = load_settings()
