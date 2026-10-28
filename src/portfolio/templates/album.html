@@ -12,13 +12,12 @@
 </section>
 <ul class="mosaic">
   {% for photo in album.photos %}
-  <li class="tile" style="--ratio: {{ photo.ratio }}">
+  <li class="tile tile--{{ photo.shape }}">
     <a href="{{ photo.href }}" data-lightbox aria-label="Open photo {{ loop.index }} of {{ loop.length }}">
       <picture>
         <source srcset="{{ photo.webp_srcset }}" sizes="{{ photo.sizes }}" type="image/webp">
         <img src="{{ photo.src }}" srcset="{{ photo.jpeg_srcset }}" sizes="{{ photo.sizes }}"
-             width="{{ photo.width }}" height="{{ photo.height }}" alt=""
-             {% if not loop.first %}loading="lazy"{% endif %}>
+             width="{{ photo.width }}" height="{{ photo.height }}" alt="" loading="lazy">
       </picture>
     </a>
   </li>

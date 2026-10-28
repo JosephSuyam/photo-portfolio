@@ -2,7 +2,7 @@
    Photo pages are black in dark mode and white in light mode (by OS setting or the header
    toggle); text on photos is always white over a dark gradient. The album index is a stack of
    full-screen scenes, one per album, that snap into place under a fixed transparent header; album
-   pages open with a cover hero, then justified rows of uncropped photos with a lightbox and a
+   pages open with a cover hero, then a gap-free mosaic of cropped photos with a lightbox and a
    full-width banner to the next album; About and Contact are a centred text column. */
 
 :root {
@@ -297,7 +297,7 @@ html:has(.scenes) { scroll-snap-type: y mandatory; }
   .scene a:hover img { transform: scale(1.03); }
 }
 
-/* Album page: cover hero, justified rows of photos, then the next-album banner. */
+/* Album page: cover hero, a mosaic of photos, then the next-album banner. */
 
 .album-hero {
   position: relative;
@@ -316,29 +316,44 @@ html:has(.scenes) { scroll-snap-type: y mandatory; }
   z-index: 1;
 }
 
-/* Each tile grows in proportion to its ratio, so every tile in a row has the same height;
-   the ::after spacer soaks up the free space of the last row so it keeps the base height. */
+/* Tile spans match MOSAIC_TILES in build.py (its widths and aspects follow from them); its
+   blocks of shapes close the grid with no holes. Every row is as tall as a column is wide, so
+   the spans alone size the tiles; the link is positioned out of flow so the photo's own size
+   never stretches a row. */
+.page-album main { container-type: inline-size; }
+
 .mosaic {
-  display: flex;
-  flex-wrap: wrap;
+  --columns: 4;
+  display: grid;
+  grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+  grid-auto-rows: calc((100cqi - (var(--columns) - 1) * var(--gap)) / var(--columns));
+  grid-auto-flow: dense;
   gap: var(--gap);
   margin: var(--gap) 0 0;
   padding: 0;
   list-style: none;
 }
 
-.mosaic::after { content: ""; flex: 999999 1 0; }
-
-/* The 28vw basis matches ROW_HEIGHT_VW in build.py. */
 .tile {
-  flex: calc(var(--ratio) * 1000) 1 calc(var(--ratio) * 28vw);
-  min-width: 0;
-  aspect-ratio: var(--ratio);
+  position: relative;
   overflow: hidden;
   animation: fade-in 600ms ease both;
 }
 
-.tile a,
+.tile--big { grid-column: span 2; grid-row: span 2; }
+
+.tile--wide { grid-column: span 2; }
+
+.tile--full { grid-column: 1 / -1; grid-row: span 2; }
+
+@media (max-width: 1024px) {
+  .mosaic { --columns: 2; }
+
+  .tile--full { grid-row: auto; }
+}
+
+.tile a { position: absolute; inset: 0; }
+
 .tile picture { display: block; width: 100%; height: 100%; }
 
 .tile img {
@@ -348,7 +363,16 @@ html:has(.scenes) { scroll-snap-type: y mandatory; }
   transition: transform 500ms ease;
 }
 
-.tile a:focus-visible { outline-offset: -2px; }
+/* The zoomed photo covers the link's own outline, so the focus ring is drawn on top of it. */
+.tile a:focus-visible { outline: none; }
+
+.tile a:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
 
 .tile a:focus-visible img { transform: scale(1.1); }
 
@@ -653,7 +677,7 @@ html:has(.lightbox[open]) { overflow: hidden; }
   html:has(.scenes) { scroll-snap-type: none; }
 }
 
-/* Phones: one column everywhere; album photos uncropped at their own ratio. */
+/* Phones: one column everywhere; album photos in square tiles. */
 
 @media (max-width: 767px) {
   .site-header { padding: 20px; }
@@ -668,11 +692,9 @@ html:has(.lightbox[open]) { overflow: hidden; }
   .scene-title,
   .album-heading { font-size: 14vw; }
 
-  .mosaic { flex-direction: column; }
+  .mosaic { --columns: 1; }
 
-  .mosaic::after { display: none; }
-
-  .tile { flex: none; width: 100%; }
+  .mosaic .tile { grid-column: auto; grid-row: auto; }
 
   .pager-next { height: 40vh; }
 

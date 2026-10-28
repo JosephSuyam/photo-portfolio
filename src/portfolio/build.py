@@ -32,15 +32,31 @@ STATIC_DIR = Path(__file__).parent / "static"
 API_DIR = Path(__file__).parent / "api"
 
 MOBILE_MAX_WIDTH_PX = 767
+TABLET_MAX_WIDTH_PX = 1024
 
 # Full-screen scenes, album hero, and next-album banner, estimated as a typical desktop window
 # and a typical portrait phone screen. Over-estimating the width only picks a larger file.
 SCENE_ASPECT = Fraction(16, 9)
 PHONE_SCENE_ASPECT = Fraction(9, 16)
 
-# Album page: justified rows whose tiles keep each photo's own ratio; a row is about this
-# tall before it stretches to fill the width. Keep in sync with site.css.
-ROW_HEIGHT_VW = 28
+# Album page: a gap-free mosaic of cropped tiles on a 4-column grid (2 on tablets, 1 on phones).
+# Photos come in blocks of six that close a 4x3 area; a last partial block uses the remainder
+# shapes, which close too. Keep the shape spans in sync with site.css.
+MOSAIC_BLOCK = ("big", "small", "small", "big", "small", "small")
+MOSAIC_REMAINDERS = {
+    1: ("full",),
+    2: ("big", "big"),
+    3: ("big", "wide", "wide"),
+    4: ("big", "small", "small", "wide"),
+    5: ("big", "small", "small", "big", "wide"),
+}
+# Shape -> (desktop width vw, tablet width vw, width / height). Every tile is square on phones.
+MOSAIC_TILES = {
+    "small": (25, 50, Fraction(1)),
+    "big": (50, 100, Fraction(1)),
+    "wide": (50, 100, Fraction(2)),
+    "full": (100, 100, Fraction(2)),
+}
 
 _SLUG_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 
@@ -131,14 +147,16 @@ def cover_sizes(variant: ImageVariant) -> str:
     The box is SCENE_ASPECT (width / height) wide, PHONE_SCENE_ASPECT on phones. A photo
     wider than its box is cropped at the sides, so it renders wider than the box.
     """
-    ratio = Fraction(variant.width, variant.height)
-
-    def width_vw(box_aspect: Fraction) -> int:
-        # Fraction keeps exact multiples exact; floats can push them just past an integer.
-        return math.ceil(100 * max(Fraction(1), ratio / box_aspect))
-
-    phone, desktop = width_vw(PHONE_SCENE_ASPECT), width_vw(SCENE_ASPECT)
+    phone = _cropped_width_vw(variant, 100, PHONE_SCENE_ASPECT)
+    desktop = _cropped_width_vw(variant, 100, SCENE_ASPECT)
     return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) {phone}vw, {desktop}vw"
+
+
+def _cropped_width_vw(variant: ImageVariant, box_width_vw: int, box_aspect: Fraction) -> int:
+    """Rendered width of a photo cropped to fill a box; wider photos overflow at the sides."""
+    # Fraction keeps exact multiples exact; floats can push them just past an integer.
+    ratio = Fraction(variant.width, variant.height)
+    return math.ceil(box_width_vw * max(Fraction(1), ratio / box_aspect))
 
 
 def photo_count(count: int) -> str:
@@ -146,16 +164,24 @@ def photo_count(count: int) -> str:
     return f"{count} photo{'' if count == 1 else 's'}"
 
 
-def justified_sizes(variant: ImageVariant) -> str:
-    """`sizes` value for a photo in a justified row; full width on phones.
+def mosaic_shapes(count: int) -> list[str]:
+    """Mosaic tile shape for each of `count` photos, in order: full blocks, then a remainder."""
+    if count < 0:
+        raise ValueError(f"Photo count must not be negative, got {count}.")
+    blocks, remainder = divmod(count, len(MOSAIC_BLOCK))
+    return [*MOSAIC_BLOCK * blocks, *MOSAIC_REMAINDERS.get(remainder, ())]
 
-    A row stretches up to about twice its base height to fill the width, so the tile is at
-    most twice as wide as at ROW_HEIGHT_VW, and never wider than the viewport.
-    """
-    # Fraction keeps exact multiples exact; floats can push them just past an integer.
-    ratio = Fraction(variant.width, variant.height)
-    width_vw = min(100, math.ceil(ratio * ROW_HEIGHT_VW * 2))
-    return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) 100vw, {width_vw}vw"
+
+def mosaic_sizes(variant: ImageVariant, shape: str) -> str:
+    """`sizes` value for a photo cropped to fill a mosaic tile of `shape` (see MOSAIC_TILES)."""
+    desktop_vw, tablet_vw, aspect = MOSAIC_TILES[shape]
+    phone = _cropped_width_vw(variant, 100, Fraction(1))
+    tablet = _cropped_width_vw(variant, tablet_vw, aspect)
+    desktop = _cropped_width_vw(variant, desktop_vw, aspect)
+    return (
+        f"(max-width: {MOBILE_MAX_WIDTH_PX}px) {phone}vw, "
+        f"(max-width: {TABLET_MAX_WIDTH_PX}px) {tablet}vw, {desktop}vw"
+    )
 
 
 def next_album_index(index: int, count: int) -> int | None:
@@ -427,12 +453,12 @@ def _album_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
                 photo,
                 base_path,
                 fallback=photo.display,
-                sizes_value=justified_sizes(photo.display),
+                sizes_value=mosaic_sizes(photo.display, shape),
             ),
-            "ratio": f"{photo.display.width / photo.display.height:.4f}",
+            "shape": shape,
             "href": image_url(base_path, photo.display.jpeg_name),
         }
-        for photo in album.photos
+        for photo, shape in zip(album.photos, mosaic_shapes(len(album.photos)), strict=True)
     ]
     return {
         "title": album.title,
