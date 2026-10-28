@@ -682,64 +682,65 @@ def test_base_path_from_url_already_encoded_path_not_double_encoded() -> None:
     assert base_path_from_url("https://x.com/my%20portfolio/") == "/my%20portfolio/"
 
 
-# justified_sizes
+# mosaic_shapes
 
-
-def test_row_height_vw_is_twenty_eight() -> None:
-    from portfolio.build import ROW_HEIGHT_VW
-
-    assert ROW_HEIGHT_VW == 28
-
-
-def test_row_height_vw_matches_tile_basis_in_stylesheet() -> None:
-    from portfolio.build import ROW_HEIGHT_VW, STATIC_DIR
-
-    css = (STATIC_DIR / "site.css").read_text(encoding="utf-8")
-    basis = re.search(
-        r"flex:\s*calc\(var\(--ratio\) \* 1000\) 1 calc\(var\(--ratio\) \* ([^)]+)\)", css
-    )
-    assert basis is not None, "no justified tile flex rule in site.css"
-    value = basis.group(1).strip()
-    if variable := re.fullmatch(r"var\((--[\w-]+)\)", value):
-        declared = re.search(rf"{variable.group(1)}:\s*([^;]+);", css)
-        value = declared.group(1).strip() if declared else value
-    assert value == f"{ROW_HEIGHT_VW}vw"
+_BLOCK = ["big", "small", "small", "big", "small", "small"]
 
 
 @pytest.mark.parametrize(
-    ("width", "height", "desktop"),
+    ("count", "expected"),
     [
-        (3000, 2000, "84vw"),
-        (1000, 1000, "56vw"),
-        (2000, 864, "100vw"),
-        (1080, 1929, "32vw"),
+        (0, []),
+        (1, ["full"]),
+        (2, ["big", "big"]),
+        (3, ["big", "wide", "wide"]),
+        (4, ["big", "small", "small", "wide"]),
+        (5, ["big", "small", "small", "big", "wide"]),
+        (6, _BLOCK),
+        (7, [*_BLOCK, "full"]),
+        (8, [*_BLOCK, "big", "big"]),
+        (9, [*_BLOCK, "big", "wide", "wide"]),
+        (10, [*_BLOCK, "big", "small", "small", "wide"]),
+        (11, [*_BLOCK, "big", "small", "small", "big", "wide"]),
+        (12, [*_BLOCK, *_BLOCK]),
+        (13, [*_BLOCK, *_BLOCK, "full"]),
     ],
 )
-def test_justified_sizes_returns_twice_row_height_width(
-    width: int, height: int, desktop: str
+def test_mosaic_shapes_blocks_then_closed_remainder(count: int, expected: list[str]) -> None:
+    from portfolio.build import mosaic_shapes
+
+    assert mosaic_shapes(count) == expected
+
+
+def test_mosaic_shapes_negative_count_raises_value_error() -> None:
+    from portfolio.build import mosaic_shapes
+
+    with pytest.raises(ValueError, match="-1"):
+        mosaic_shapes(-1)
+
+
+# mosaic_sizes
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "shape", "expected"),
+    [
+        # A 3:2 photo overflows a square tile: 1.5x its 100 / 50 / 25vw box.
+        (3000, 2000, "small", "(max-width: 767px) 150vw, (max-width: 1024px) 75vw, 38vw"),
+        # A 2:1 photo fits a 2:1 tile exactly and overflows only the square phone tile.
+        (2000, 1000, "wide", "(max-width: 767px) 200vw, (max-width: 1024px) 100vw, 50vw"),
+        # A tall photo is cropped top and bottom, so it is never wider than its tile.
+        (1000, 2000, "big", "(max-width: 767px) 100vw, (max-width: 1024px) 100vw, 50vw"),
+    ],
+)
+def test_mosaic_sizes_returns_cropped_width_per_breakpoint(
+    width: int, height: int, shape: str, expected: str
 ) -> None:
-    from portfolio.build import justified_sizes
+    from portfolio.build import mosaic_sizes
     from portfolio.images import ImageVariant
 
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=width, height=height)
-    assert justified_sizes(variant) == f"(max-width: 767px) 100vw, {desktop}"
-
-
-def test_justified_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
-    from portfolio.build import justified_sizes
-    from portfolio.images import ImageVariant
-
-    # 56 * 116 / 112 is exactly 58, but (116 / 112) * 28 * 2 is 58.00000000000001 in floats.
-    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=116, height=112)
-    assert justified_sizes(variant) == "(max-width: 767px) 100vw, 58vw"
-
-
-def test_justified_sizes_very_wide_photo_capped_at_viewport_width() -> None:
-    from portfolio.build import justified_sizes
-    from portfolio.images import ImageVariant
-
-    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=6000, height=1000)
-    assert justified_sizes(variant) == "(max-width: 767px) 100vw, 100vw"
+    assert mosaic_sizes(variant, shape) == expected
 
 
 # build_site: album mosaic and lightbox
@@ -757,30 +758,16 @@ def _tiles(out: Path) -> list[Element]:
     return _page(out / "a" / "index.html").find_all("ul.mosaic li.tile")
 
 
-def test_build_site_album_tile_style_carries_photo_ratio(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", size=(1200, 800))
-    _build([make_album("a", [make_photo("p1")])], cache, out)
-    assert [tile.attrs.get("style") for tile in _tiles(out)] == ["--ratio: 1.5000"]
+def test_build_site_album_tiles_have_shape_class_in_photo_order(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 8)], cache, out)
+    shapes = ["big", "small", "small", "big", "small", "small", "big", "big"]
+    assert [tile.classes for tile in _tiles(out)] == [["tile", f"tile--{s}"] for s in shapes]
 
 
-def test_build_site_album_tile_ratio_rounded_to_four_decimals(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", size=(1000, 700))
-    _build([make_album("a", [make_photo("p1")])], cache, out)
-    assert [tile.attrs.get("style") for tile in _tiles(out)] == ["--ratio: 1.4286"]
-
-
-def test_build_site_album_tiles_keep_photo_order_ratios(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", size=(800, 1200), color=(255, 0, 0))
-    write_original(cache, "p2", size=(900, 900), color=(0, 255, 0))
-    write_original(cache, "p3", size=(1600, 400), color=(0, 0, 255))
-    _build([make_album("a", [make_photo(f"p{n}") for n in (1, 2, 3)])], cache, out)
-    styles = [tile.attrs.get("style") for tile in _tiles(out)]
-    assert styles == ["--ratio: 0.6667", "--ratio: 1.0000", "--ratio: 4.0000"]
-
-
-def test_build_site_album_tiles_have_no_shape_class(cache: Path, out: Path) -> None:
-    _build([_album_of(cache, 5)], cache, out)
-    assert [tile.classes for tile in _tiles(out)] == [["tile"]] * 5
+def test_build_site_album_tiles_all_lazy(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 3)], cache, out)
+    loading = [_one(tile, "img").attrs.get("loading") for tile in _tiles(out)]
+    assert loading == ["lazy"] * 3
 
 
 def test_build_site_album_tile_links_display_jpeg_with_base_path(
@@ -810,12 +797,12 @@ def test_build_site_album_tile_last_link_label_counts_all_photos(cache: Path, ou
     assert 'aria-label="Open photo 3 of 3"' in _read(out / "a" / "index.html")
 
 
-def test_build_site_album_tile_sizes_from_justified_row(cache: Path, out: Path) -> None:
+def test_build_site_album_tile_sizes_from_tile_shape(cache: Path, out: Path) -> None:
     write_original(cache, "p1", size=(1200, 800))
     _build([make_album("a", [make_photo("p1")])], cache, out)
     image = _one(_tiles(out)[0], "img")
-    # A 3:2 photo at twice the 28vw row height is 3/2 * 56 = 84vw wide.
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 84vw"
+    # A lone photo is a full tile: 2:1 on desktop and tablet, square on phones.
+    assert image.attrs.get("sizes") == "(max-width: 767px) 150vw, (max-width: 1024px) 100vw, 100vw"
 
 
 def test_build_site_album_tile_source_sizes_match_image(cache: Path, out: Path) -> None:

@@ -17,7 +17,7 @@ const FIRST_ALBUM = ALBUMS[0];
 const LAST_ALBUM = ALBUMS[ALBUMS.length - 1];
 /** An album that is neither first nor last. */
 const MIDDLE_ALBUM = ALBUMS[2];
-/** Eleven photos of mixed ratios in several justified rows; the album the lightbox and layout tests browse. */
+/** Eleven photos of mixed ratios: a block of six, then the five-photo remainder; the album the lightbox and layout tests browse. */
 const LANDSCAPES = ALBUMS[3];
 const LONG_TITLE_ALBUM = ALBUMS[4];
 const SINGLE_PHOTO_ALBUM = LAST_ALBUM;
@@ -35,8 +35,8 @@ const OVERLAY_TEXT = "rgb(255, 255, 255)";
 const ON_PHOTO_MUTED = "rgba(255, 255, 255, 0.9)";
 /** Display and body type, as computed `font-family`. */
 const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
-/** Album page rows start at this height before stretching to fill the width; ROW_HEIGHT_VW in build.py. */
-const ROW_HEIGHT_VW = 28;
+/** Gap between album tiles; `--gap` in site.css. */
+const GAP_PX = 4;
 
 function photoCount(count: number): string {
   return `${count} photo${count === 1 ? "" : "s"}`;
@@ -233,28 +233,38 @@ function setSiteTitle(page: Page, text: string): Promise<void> {
   }, text);
 }
 
-type TileRect = { top: number; left: number; right: number; height: number; width: number; ratio: number };
+type TileBox = Box & { shape: string };
 
-/** Album page tiles grouped into rows the way flex-wrap lays them out: a new row starts when a tile wraps left. */
-function justifiedRows(page: Page): Promise<TileRect[][]> {
+/** The mosaic's box and each tile's box and `tile--<shape>`, in page order. */
+function mosaicTiles(page: Page): Promise<{ grid: Box; tiles: TileBox[] }> {
   return page.locator(".mosaic").evaluate((mosaic) => {
-    const rows: TileRect[][] = [];
-    for (const tile of mosaic.querySelectorAll<HTMLElement>(".tile")) {
-      const rect = tile.getBoundingClientRect();
-      const entry = {
-        top: rect.top,
-        left: rect.left,
-        right: rect.right,
-        height: rect.height,
-        width: rect.width,
-        ratio: Number.parseFloat(tile.style.getPropertyValue("--ratio")),
-      };
-      const row = rows.at(-1);
-      if (!row || rect.left < row.at(-1)!.right) rows.push([entry]);
-      else row.push(entry);
-    }
-    return rows;
+    const toBox = (rect: DOMRect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+    const tiles = Array.from(mosaic.querySelectorAll(".tile"), (tile) => ({
+      ...toBox(tile.getBoundingClientRect()),
+      shape: Array.from(tile.classList).find((name) => name.startsWith("tile--"))?.slice("tile--".length) ?? "",
+    }));
+    return { grid: toBox(mosaic.getBoundingClientRect()), tiles };
   });
+}
+
+/**
+ * How the tiles cover the mosaic: indexes of tiles outside it, pairs that overlap, and whether
+ * the tiles, each grown by one gap to the right and below, add up to the mosaic grown the same way,
+ * which holds only when the tiles close every row with `GAP_PX` gaps and leave no holes.
+ */
+function mosaicCoverage({ grid, tiles }: { grid: Box; tiles: TileBox[] }) {
+  const outside = tiles.flatMap((tile, index) => (isInside(tile, grid) ? [] : [index]));
+  const overlapping: [number, number][] = [];
+  tiles.forEach((a, i) =>
+    tiles.slice(i + 1).forEach((b, offset) => {
+      const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+      if (width > 1 && height > 1) overlapping.push([i, i + 1 + offset]);
+    }),
+  );
+  const tileArea = tiles.reduce((sum, tile) => sum + (tile.width + GAP_PX) * (tile.height + GAP_PX), 0);
+  const gridArea = (grid.width + GAP_PX) * (grid.height + GAP_PX);
+  return { outside, overlapping, covered: Math.abs(tileArea / gridArea - 1) < 0.001 };
 }
 
 function lightboxImageSrc(page: Page): Promise<string> {
@@ -1217,15 +1227,17 @@ test.describe("single-photo album", () => {
     await page.goto(`/${SINGLE_PHOTO_ALBUM.slug}/`);
   });
 
-  test("its only tile is not stretched to fill a desktop row", async ({ page, isMobile }) => {
-    test.skip(isMobile, "phones show every tile full width");
-    const tile = await boxOf(page.locator(".tile"));
-    const rowHeight = (ROW_HEIGHT_VW * (await page.evaluate(() => window.innerWidth))) / 100;
-    expect(Math.abs(tile.height - rowHeight), `tile ${tile.height}px, row ${rowHeight}px`).toBeLessThanOrEqual(2);
+  test("its only tile is a full tile, four columns wide and two rows tall on desktop", async ({ page, isMobile }) => {
+    test.skip(isMobile, "phones show every tile as a square");
+    const { grid, tiles } = await mosaicTiles(page);
+    const twoRows = 2 * ((grid.width - 3 * GAP_PX) / 4) + GAP_PX;
+    expect(tiles.map((tile) => [Math.round(tile.width), Math.round(tile.height)])).toEqual([
+      [Math.round(grid.width), Math.round(twoRows)],
+    ]);
   });
 
   test("its only tile is full width on phones", async ({ page, isMobile }) => {
-    test.skip(!isMobile, "desktop rows keep the base row height");
+    test.skip(!isMobile, "desktop shows a two-row full tile");
     const tile = await boxOf(page.locator(".tile"));
     expect(Math.round(tile.width)).toBe(await layoutWidth(page));
   });
@@ -1441,74 +1453,60 @@ for (const colorScheme of ["light", "dark"] as const) {
   });
 }
 
+/** Mosaic grids wide enough for more than one column: 4 above 1024px, 2 from 768 to 1024px. */
+const MOSAIC_GRIDS = [
+  { name: "desktop", viewport: { width: 1440, height: 900 }, columns: 4 },
+  { name: "tablet", viewport: { width: 1024, height: 768 }, columns: 2 },
+];
+
+for (const { name, viewport, columns } of MOSAIC_GRIDS) {
+  test.describe(`album mosaic on a ${name} at ${viewport.width}px`, () => {
+    test.skip(({ isMobile }) => isMobile, "a desktop window");
+    test.use({ viewport });
+
+    test(`mosaic has ${columns} columns`, async ({ page }) => {
+      await page.goto(`/${LANDSCAPES.slug}/`);
+      const tracks = await page
+        .locator(".mosaic")
+        .evaluate((mosaic) => getComputedStyle(mosaic).gridTemplateColumns.split(" ").length);
+      expect(tracks).toBe(columns);
+    });
+
+    for (const album of ALBUMS) {
+      test(`${album.slug} tiles cover the mosaic with no holes`, async ({ page }) => {
+        await page.goto(`/${album.slug}/`);
+        expect(mosaicCoverage(await mosaicTiles(page))).toEqual({ outside: [], overlapping: [], covered: true });
+      });
+    }
+
+    test("big tiles are square", async ({ page }) => {
+      await page.goto(`/${LANDSCAPES.slug}/`);
+      const big = (await mosaicTiles(page)).tiles.filter((tile) => tile.shape === "big");
+      expect(big.length).toBeGreaterThan(0);
+      expect(big.map((tile) => Math.abs(tile.width - tile.height) <= 1)).toEqual(big.map(() => true));
+    });
+  });
+}
+
+test.describe("album mosaic", () => {
+  test("tile photos fill their tile, cropped rather than stretched", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const fits = await page.locator(".tile img").evaluateAll((images: HTMLImageElement[]) =>
+      images.map((image) => {
+        const tile = image.closest<HTMLElement>(".tile")!;
+        return (
+          getComputedStyle(image).objectFit === "cover" &&
+          Math.abs(image.clientWidth - tile.clientWidth) <= 1 &&
+          Math.abs(image.clientHeight - tile.clientHeight) <= 1
+        );
+      }),
+    );
+    expect(fits).toEqual(fits.map(() => true));
+  });
+});
+
 test.describe("desktop", () => {
   test.skip(({ isMobile }) => isMobile, "desktop layout only");
-
-  test("tiles in one row share a top", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const rows = await justifiedRows(page);
-    const spreads = rows.map((row) => Math.max(...row.map((t) => t.top)) - Math.min(...row.map((t) => t.top)));
-    expect({ rows: rows.length > 2, worst: Math.max(...spreads) <= 1 }).toEqual({ rows: true, worst: true });
-  });
-
-  test("tiles in one row share a height", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const rows = await justifiedRows(page);
-    const spreads = rows.map((row) => Math.max(...row.map((t) => t.height)) - Math.min(...row.map((t) => t.height)));
-    expect(Math.max(...spreads)).toBeLessThanOrEqual(1);
-  });
-
-  test("every row but the last fills the mosaic width", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const content = await page.locator(".mosaic").evaluate((mosaic) => {
-      const style = getComputedStyle(mosaic);
-      const box = mosaic.getBoundingClientRect();
-      return { left: box.left + Number.parseFloat(style.paddingLeft), right: box.right - Number.parseFloat(style.paddingRight) };
-    });
-    const rows = (await justifiedRows(page)).slice(0, -1);
-    const worst = Math.max(
-      ...rows.map((row) => Math.max(Math.abs(row[0].left - content.left), Math.abs(content.right - row.at(-1)!.right))),
-    );
-    expect(worst).toBeLessThanOrEqual(2);
-  });
-
-  test("the last row is not stretched taller than the other rows", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const heights = (await justifiedRows(page)).map((row) => row[0].height);
-    const last = heights.at(-1)!;
-    expect(last).toBeLessThanOrEqual(Math.min(...heights.slice(0, -1)) + 1);
-  });
-
-  test("the last row keeps the base row height", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const last = (await justifiedRows(page)).at(-1)![0].height;
-    const rowHeight = (ROW_HEIGHT_VW * (await page.evaluate(() => window.innerWidth))) / 100;
-    expect(Math.abs(last - rowHeight), `last row ${last}px, base ${rowHeight}px`).toBeLessThanOrEqual(2);
-  });
-
-  test("tiles keep their photo's ratio", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const tiles = (await justifiedRows(page)).flat();
-    const worst = Math.max(...tiles.map((tile) => Math.abs(tile.width / tile.height - tile.ratio)));
-    expect(worst).toBeLessThan(0.02);
-  });
-
-  test("tile images are not cropped", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const images = page.locator(".tile img");
-    for (const image of await images.all()) {
-      await expectImageLoaded(image);
-    }
-    const worstDistortion = await images.evaluateAll((elements: HTMLImageElement[]) =>
-      Math.max(
-        ...elements.map((image) => {
-          const tile = image.closest(".tile")!.getBoundingClientRect();
-          return Math.abs(tile.width / tile.height - image.naturalWidth / image.naturalHeight);
-        }),
-      ),
-    );
-    expect(worstDistortion).toBeLessThan(0.02);
-  });
 
   test("hovering a tile zooms its image", async ({ page }) => {
     await page.goto(`/${LANDSCAPES.slug}/`);
@@ -1568,26 +1566,9 @@ test.describe("mobile", () => {
     expect(widths).toEqual(widths.map(() => full));
   });
 
-  test("album tiles keep their photo's ratio", async ({ page }) => {
+  test("album tiles are square", async ({ page }) => {
     await page.goto(`/${LANDSCAPES.slug}/`);
-    const tiles = (await justifiedRows(page)).flat();
-    const worst = Math.max(...tiles.map((tile) => Math.abs(tile.width / tile.height - tile.ratio)));
-    expect(worst).toBeLessThan(0.02);
-  });
-
-  test("album photos keep their natural aspect ratio", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const images = page.locator(".tile img");
-    for (const image of await images.all()) {
-      await expectImageLoaded(image);
-    }
-    const worstDistortion = await images.evaluateAll((elements: HTMLImageElement[]) =>
-      Math.max(
-        ...elements.map((image) =>
-          Math.abs(image.clientWidth / image.clientHeight - image.naturalWidth / image.naturalHeight),
-        ),
-      ),
-    );
-    expect(worstDistortion).toBeLessThan(0.02);
+    const { tiles } = await mosaicTiles(page);
+    expect(tiles.map((tile) => Math.abs(tile.width - tile.height) <= 1)).toEqual(tiles.map(() => true));
   });
 });
