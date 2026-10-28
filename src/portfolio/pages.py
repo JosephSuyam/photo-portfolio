@@ -23,7 +23,8 @@ _URL_SCHEMES = frozenset({"https", "http"})
 _MAX_REPORTED_ERRORS = 3
 # json's own recursion limit depends on the Python version and the C stack, so we cap depth.
 _MAX_JSON_DEPTH = 32
-_JSON_STRING = re.compile(r'"(?:[^"\\]|\\.)*"', re.DOTALL)
+# The closing quote is optional so an unterminated string ends the scan (linear, not quadratic).
+_JSON_STRING = re.compile(r'"(?:[^"\\]|\\.)*"?', re.DOTALL)
 # JSON has no comments, so unknown keys such as "_comment" are ignored rather than rejected.
 _PAGE_FILE_CONFIG = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
@@ -168,6 +169,8 @@ def _nesting_depth(text: str) -> int:
             deepest = max(deepest, depth)
         elif char in "]}":
             depth -= 1
+            if depth < 0:
+                break  # a stray closer: let json report its position
     return deepest
 
 
