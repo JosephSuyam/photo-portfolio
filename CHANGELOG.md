@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- "Cinematic" redesign: heavy uppercase Helvetica titles replace Bodoni, and the header sits over the photos. White text on photos keeps a dark fade behind it in both themes; About and Contact follow the theme. Bodoni Moda (`static/fonts/`) and the hover-preview script are removed.
+- Album index: one full-screen cover per album (16:9, 9:16 on phones), scroll-snapped one album at a time, with the title, photo count, and "01 / 03". Snapping is off with reduced motion. Replaces the featured album and cover cards.
+- Album pages: open on the cover filling the screen; clicking it opens the lightbox (a separate `cover.*` file comes first as "1 / n+1"). Clicks on the title and count text don't open it, and the text stays selectable. Without JavaScript the cover links to its JPEG. Album titles are 5vw (9vw on phones), the same as on the index.
+- Album pages: a mosaic of square-cropped photos replaces the justified rows: 4 columns on desktop, 2 on tablets, 1 on phones, with large 2x2 tiles on alternating sides. The last tiles stretch to fill the final row, so it has no holes. The lightbox still shows each photo whole.
+- Album pages end on a large "Next album" banner with "← Previous" in its corner.
 - "Portfolio" redesign: a white page (black in dark mode) with Bodoni display headlines over Helvetica text. Every page opens with the site title centered over a spaced uppercase menu, with the theme toggle at the top right. The 1.5 s theme cross-fade is unchanged.
 - Album index: "Work" and the counts centered, then the first album as a full-bleed 21:9 feature (4:5 on phones) with its label, title, and count in white over the photo. The other albums follow edge to edge, two per row in 3:2 frames; a lone last card spans the row at 3:1, the same height. Titles and counts sit on the photos, and hovering a card zooms it slightly (not with reduced motion). Hovering or focusing a card still previews it in the feature.
 - Album pages: justified rows replace the mosaic. Every photo is shown whole at its own aspect ratio, rows share one height, and the last row isn't stretched. Phones get one column.
