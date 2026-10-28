@@ -3,6 +3,7 @@
 ## Unreleased
 
 - About and Contact: an optional `about.<ext>` / `contact.<ext>` photo (JPEG, PNG, WebP) in the Drive root gives the page a split layout: the photo fills the left half and stays put while the text scrolls (on top on phones), and Contact details become ruled label/value rows. Without a photo the pages stay centered. Older manifests still load.
+- Photo protection (deterrents only): no context menu on photos or the lightbox, no dragging photos, no middle-click or Ctrl/Cmd/Shift/Alt-click opening the raw image (modified clicks open the lightbox), and no iOS long-press save. Photo counts on the index and album pages now include a separate `cover.*` file; a cover identical to a photo counts once.
 - "Cinematic" redesign: heavy uppercase Helvetica titles replace Bodoni, and the header sits over the photos. White text on photos keeps a dark fade behind it in both themes; About and Contact follow the theme. Bodoni Moda (`static/fonts/`) and the hover-preview script are removed.
 - Album index: one full-screen cover per album (16:9, 9:16 on phones), scroll-snapped one album at a time, with the title, photo count, and "01 / 03". Snapping is off with reduced motion. Replaces the featured album and cover cards.
 - Album pages: open on the cover filling the screen; clicking it opens the lightbox (a separate `cover.*` file comes first as "1 / n+1"). Clicks on the title and count text don't open it, and the text stays selectable. Without JavaScript the cover links to its JPEG. Album titles are 5vw (9vw on phones), the same as on the index.
