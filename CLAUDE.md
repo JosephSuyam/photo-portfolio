@@ -4,7 +4,7 @@
 A photographer portfolio, generated from a Google Drive folder: root = portfolio, each **subfolder = one album**, each **image = a photo**.
 - Pages: `/` and `/work/` (album index: first album featured, the rest as cover cards), `/<album-slug>/` (title, justified photo rows with lightbox, Previous/Next albums). `/about/` and `/contact/` (from root `about.json` / `contact.json`, omitted when absent; samples in `docs/examples/`). Light/dark theme toggle. Blog, client proofing: out of scope until asked.
 - Pipeline: `sync` (Drive -> `.cache/` + `manifest.json`) -> `build` (images, Jinja2, compiled TypeScript -> `dist/`) -> `serve`/deploy (static files). Drive is never called at page-view time and Drive links never appear in output (they expire and must not be public).
-- Stack: Python 3.12+ via `uv` (google-api-python-client, google-auth, Pillow, Jinja2, typer, pydantic v2, ruff, mypy, pytest); npm for TypeScript 7 (tsconfig needs `rootDir`) and Playwright (runs on the installed Edge).
+- Stack: Python 3.12+ via `uv` (pinned to 3.12 via `.python-version`; CI uses it) (google-api-python-client, google-auth, Pillow, Jinja2, typer, pydantic v2, ruff, mypy, pytest); npm for TypeScript 7 (tsconfig needs `rootDir`) and Playwright (runs on the installed Edge).
 - Layout: `src/portfolio/` (`drive.py` is the only module that talks to Google; `ts/` site script), `tests/` mirrors it (`FakeDriveClient` in `tests/fixtures/`), `e2e/` Playwright + fixture site (generated images, no Drive), `docs/`.
 
 ## Commands (single source of truth; agents and skills refer here)
