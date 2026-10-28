@@ -1,9 +1,15 @@
 {% extends "base.html" %}
+{% from "macros.html" import picture %}
 {% set page_class = "page-album" %}
 {% block title %}{{ album.title }} | {{ site_title }}{% endblock %}
 {% block content %}
-<h1 class="album-heading">{{ album.title }}</h1>
-<p class="album-count">{{ album.count }}</p>
+<section class="album-hero">
+  {{ picture(album.cover, eager=true) }}
+  <div class="album-hero-text">
+    <h1 class="album-heading">{{ album.title }}</h1>
+    <p class="album-count">{{ album.count }}</p>
+  </div>
+</section>
 <ul class="mosaic">
   {% for photo in album.photos %}
   <li class="tile" style="--ratio: {{ photo.ratio }}">
@@ -20,14 +26,11 @@
 </ul>
 {% if next_album %}
 <nav class="album-pager" aria-label="More albums">
-  <a class="pager-prev" rel="prev" href="{{ base_path }}{{ previous_album.slug }}/">
-    <small>&larr; Previous</small>
-    <span>{{ previous_album.title }}</span>
-  </a>
   <a class="pager-next" rel="next" href="{{ base_path }}{{ next_album.slug }}/">
-    <small>Next &rarr;</small>
-    <span>{{ next_album.title }}</span>
+    {{ picture(next_album.cover) }}
+    <span class="pager-text"><small>Next album</small> <span>{{ next_album.title }}</span></span>
   </a>
+  <a class="pager-prev" rel="prev" href="{{ base_path }}{{ previous_album.slug }}/"><small>&larr; Previous</small> <span>{{ previous_album.title }}</span></a>
 </nav>
 {% endif %}
 {% if script_names %}

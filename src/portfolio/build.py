@@ -33,13 +33,10 @@ API_DIR = Path(__file__).parent / "api"
 
 MOBILE_MAX_WIDTH_PX = 767
 
-# Album index: the first album in a full-bleed feature, the rest in a 12-column grid of cards,
-# two per row, that all share one height; keep in sync with site.css.
-FEATURE_WIDTH_VW = 100
-FEATURE_ASPECT = Fraction(21, 9)
-GRID_COLUMNS = 12
-CARDS_PER_ROW = 2
-CARD_FRAME_ASPECT = Fraction(3, 2)
+# Full-screen scenes, album hero, and next-album banner, estimated as a typical desktop window
+# and a typical portrait phone screen. Over-estimating the width only picks a larger file.
+SCENE_ASPECT = Fraction(16, 9)
+PHONE_SCENE_ASPECT = Fraction(9, 16)
 
 # Album page: justified rows whose tiles keep each photo's own ratio; a row is about this
 # tall before it stretches to fill the width. Keep in sync with site.css.
@@ -128,35 +125,20 @@ def srcset(candidates: Iterable[tuple[str, int]]) -> str:
     return ", ".join(f"{url} {width}w" for url, width in seen.items())
 
 
-def cover_sizes(variant: ImageVariant, width_vw: int | Fraction, box_aspect: Fraction) -> str:
-    """`sizes` value for a photo cropped to fill a box `width_vw` wide; full width on phones.
+def cover_sizes(variant: ImageVariant) -> str:
+    """`sizes` value for a cover cropped to fill a full-width scene box.
 
-    `box_aspect` is the box's width / height. A photo wider than its box is cropped at the
-    sides, so it renders wider than the box.
+    The box is SCENE_ASPECT (width / height) wide, PHONE_SCENE_ASPECT on phones. A photo
+    wider than its box is cropped at the sides, so it renders wider than the box.
     """
-    # Fraction keeps exact multiples exact; floats can push them just past an integer.
-    overflow = max(Fraction(1), Fraction(variant.width, variant.height) / box_aspect)
-    return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) 100vw, {math.ceil(width_vw * overflow)}vw"
+    ratio = Fraction(variant.width, variant.height)
 
+    def width_vw(box_aspect: Fraction) -> int:
+        # Fraction keeps exact multiples exact; floats can push them just past an integer.
+        return math.ceil(100 * max(Fraction(1), ratio / box_aspect))
 
-def album_card_spans(count: int) -> list[int]:
-    """Grid column span of each of `count` album cards, so every row fills all 12 columns.
-
-    Cards come two to a row; a lone last card fills its row on its own.
-    """
-    if count < 0:
-        raise ValueError(f"Card count must not be negative, got {count}.")
-    full_rows, left = divmod(count, CARDS_PER_ROW)
-    full_span = GRID_COLUMNS // CARDS_PER_ROW
-    return [full_span] * (full_rows * CARDS_PER_ROW) + ([GRID_COLUMNS] if left else [])
-
-
-def card_aspect(span: int) -> Fraction:
-    """Width / height of a card spanning `span` columns, ignoring the gaps between columns.
-
-    site.css gives every card frame the same height; this ratio is close enough for `sizes`.
-    """
-    return CARD_FRAME_ASPECT * span / (GRID_COLUMNS // CARDS_PER_ROW)
+    phone, desktop = width_vw(PHONE_SCENE_ASPECT), width_vw(SCENE_ASPECT)
+    return f"(max-width: {MOBILE_MAX_WIDTH_PX}px) {phone}vw, {desktop}vw"
 
 
 def photo_count(count: int) -> str:
@@ -392,7 +374,14 @@ def _render_site(
             **common,
             album=_album_context(album, base_path),
             previous_album=_link(albums[previous_index]) if previous_index is not None else None,
-            next_album=_link(albums[next_index]) if next_index is not None else None,
+            next_album=(
+                {
+                    **_link(albums[next_index]),
+                    "cover": _cover_context(albums[next_index], base_path),
+                }
+                if next_index is not None
+                else None
+            ),
         )
         _write_page(out_dir / album.slug / "index.html", html)
 
@@ -411,45 +400,23 @@ def _link(album: PublishedAlbum) -> dict[str, str]:
 
 
 def _index_context(albums: Sequence[PublishedAlbum], base_path: str) -> dict[str, object]:
-    photo_total = sum(len(album.photos) for album in albums)
-    feature = None
-    if albums:
-        first = albums[0]
-        feature = {
-            **_link(first),
-            "count": photo_count(len(first.photos)),
-            "cover": _cover_context(first, base_path, FEATURE_WIDTH_VW, FEATURE_ASPECT),
-        }
-    rest = albums[1:]
-    cards = [
+    scenes = [
         {
             **_link(album),
             "count": photo_count(len(album.photos)),
-            "span": span,
-            "feature_sizes": cover_sizes(album.cover.display, FEATURE_WIDTH_VW, FEATURE_ASPECT),
-            "cover": _cover_context(
-                album, base_path, Fraction(100 * span, GRID_COLUMNS), card_aspect(span)
-            ),
+            "cover": _cover_context(album, base_path),
         }
-        for album, span in zip(rest, album_card_spans(len(rest)), strict=True)
+        for album in albums
     ]
-    album_word = "album" if len(albums) == 1 else "albums"
-    photo_word = "photograph" if photo_total == 1 else "photographs"
-    return {
-        "summary": f"{len(albums)} {album_word} · {photo_total} {photo_word}",
-        "feature": feature,
-        "cards": cards,
-    }
+    return {"scenes": scenes}
 
 
-def _cover_context(
-    album: PublishedAlbum, base_path: str, width_vw: int | Fraction, box_aspect: Fraction
-) -> dict[str, object]:
+def _cover_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
     return _image_context(
         album.cover,
         base_path,
         fallback=album.cover.thumbnail,
-        sizes_value=cover_sizes(album.cover.display, width_vw, box_aspect),
+        sizes_value=cover_sizes(album.cover.display),
     )
 
 
@@ -467,7 +434,12 @@ def _album_context(album: PublishedAlbum, base_path: str) -> dict[str, object]:
         }
         for photo in album.photos
     ]
-    return {"title": album.title, "count": photo_count(len(album.photos)), "photos": photos}
+    return {
+        "title": album.title,
+        "count": photo_count(len(album.photos)),
+        "cover": _cover_context(album, base_path),
+        "photos": photos,
+    }
 
 
 def _image_context(
