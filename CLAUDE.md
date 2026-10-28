@@ -18,7 +18,7 @@ A photographer portfolio, generated from a Google Drive folder: root = portfolio
 
 ## Drive conventions
 - Albums: immediate subfolders of the root, natural sort by name ("Book 2" before "Book 10"); a numeric prefix (`01 Book I`) forces order. Deeper nesting ignored; empty albums unpublished.
-- Title: folder name as written (trimmed). Slug from the title (`01-book-i`), unique (`-2`), never `work`, `static`, `images`, `about`, or `contact`.
+- Title: folder name as written (trimmed). Slug from the title (`01-book-i`), unique (`-2`), never `work`, `static`, `images`, `about`, `contact`, or `api`.
 - Photos: JPEG, PNG, WebP, natural sort by filename; other files and shortcuts skipped with a warning. Cover: a `cover.*` file (not shown among photos), else the first photo.
 - Drive lists an unshared folder as **empty**, so sync calls `get_folder(root)` first. Handle pagination and shared drives (`supportsAllDrives=True`). Names and ids are untrusted: sanitize.
 

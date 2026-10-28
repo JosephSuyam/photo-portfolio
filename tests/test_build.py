@@ -455,10 +455,10 @@ def test_build_site_traversal_slug_writes_nothing_outside_out(cache: Path, out: 
 def test_reserved_slugs_match_site_paths() -> None:
     from portfolio.build import RESERVED_SLUGS
 
-    assert frozenset({"work", "static", "images", "about", "contact"}) == RESERVED_SLUGS
+    assert frozenset({"work", "static", "images", "about", "contact", "api"}) == RESERVED_SLUGS
 
 
-@pytest.mark.parametrize("slug", ["work", "static", "images", "about", "contact"])
+@pytest.mark.parametrize("slug", ["work", "static", "images", "about", "contact", "api"])
 def test_build_site_reserved_slug_raises_build_error(cache: Path, out: Path, slug: str) -> None:
     from portfolio.build import BuildError
 
