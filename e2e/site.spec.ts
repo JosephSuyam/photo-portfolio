@@ -15,28 +15,28 @@ const ALBUMS = [
 ];
 const FIRST_ALBUM = ALBUMS[0];
 const LAST_ALBUM = ALBUMS[ALBUMS.length - 1];
-/** Albums after the first, shown as cards in the grid below the feature card. */
-const GRID_ALBUMS = ALBUMS.slice(1);
-/** A grid card that is neither first nor last; the album the hover preview tests show. */
-const PREVIEWED = ALBUMS[2];
-/** Eleven photos of mixed ratios in several justified rows; the album the lightbox and layout tests browse. */
+/** An album that is neither first nor last. */
+const MIDDLE_ALBUM = ALBUMS[2];
+/** Eleven photos of mixed ratios: a block of six, then the five-photo remainder; the album the lightbox and layout tests browse. */
 const LANDSCAPES = ALBUMS[3];
 const LONG_TITLE_ALBUM = ALBUMS[4];
 const SINGLE_PHOTO_ALBUM = LAST_ALBUM;
 const SITE_TITLE = "Reel E2E";
 /** A site title too long for one line at the 40px desktop size in a 1280px window. */
 const VERY_LONG_SITE_TITLE = "Reel E2E Fine Art, Documentary and Editorial Photography Company of Lisbon";
-const PHOTO_TOTAL = ALBUMS.reduce((sum, album) => sum + album.photos, 0);
 /** `--bg` of each theme, as computed `background-color`. */
 const LIGHT_BACKGROUND = "rgb(255, 255, 255)";
 const DARK_BACKGROUND = "rgb(0, 0, 0)";
-/** Dark-theme `--fg` and `--muted` channel values (#f2f2f2, #8f8f8f). */
-const DARK_FG_CHANNEL = 242;
-const DARK_MUTED_CHANNEL = 143;
-/** Text overlaid on photos is always white, in both themes. */
+/** Dark-theme `--fg` and `--muted`, as computed `color`. */
+const DARK_FG = "rgb(255, 255, 255)";
+const DARK_MUTED = "rgba(255, 255, 255, 0.65)";
+/** Text overlaid on photos is always white, in both themes; secondary text is `--on-photo-muted`. */
 const OVERLAY_TEXT = "rgb(255, 255, 255)";
-/** Album page rows start at this height before stretching to fill the width; ROW_HEIGHT_VW in build.py. */
-const ROW_HEIGHT_VW = 28;
+const ON_PHOTO_MUTED = "rgba(255, 255, 255, 0.9)";
+/** Display and body type, as computed `font-family`. */
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+/** Gap between album tiles; `--gap` in site.css. */
+const GAP_PX = 4;
 
 function photoCount(count: number): string {
   return `${count} photo${count === 1 ? "" : "s"}`;
@@ -54,22 +54,6 @@ function endsWithTitle(title: string): RegExp {
 /** Footer text: the site title, then the build year. */
 function footerText(): RegExp {
   return new RegExp(`${escapeRegExp(SITE_TITLE)}[\\s\\S]*© ${new Date().getFullYear()}`);
-}
-
-/** Presses Tab until `target` has focus, so it gets keyboard (`:focus-visible`) focus. */
-async function tabTo(page: Page, target: Locator, maxPresses = 30): Promise<void> {
-  for (let press = 0; press < maxPresses; press++) {
-    if (await target.evaluate((element) => element === document.activeElement)) return;
-    await page.keyboard.press("Tab");
-  }
-  await expect(target).toBeFocused();
-}
-
-function featureSizes(page: Page): Promise<{ source: string | null; image: string | null }> {
-  return feature(page).evaluate((link) => ({
-    source: link.querySelector("source")?.getAttribute("sizes") ?? null,
-    image: link.querySelector("img")?.getAttribute("sizes") ?? null,
-  }));
 }
 
 async function expectImageLoaded(image: Locator): Promise<void> {
@@ -97,42 +81,13 @@ function trackFailures(page: Page): string[] {
   return failures;
 }
 
-function feature(page: Page): Locator {
-  return page.locator("section.albums a.feature");
+function scene(page: Page, title: string): Locator {
+  const exactTitle = page.locator(".scene-title").getByText(title, { exact: true });
+  return page.locator("section.scenes article.scene").filter({ has: exactTitle });
 }
 
-function card(page: Page, title: string): Locator {
-  const exactTitle = page.locator(".album-title").getByText(title, { exact: true });
-  return page.locator(".album-grid .album-card").filter({ has: exactTitle });
-}
-
-/** The index image showing `album`'s cover before any preview: the feature or its card. */
-function indexCover(page: Page, album: (typeof ALBUMS)[number]): Locator {
-  return album === FIRST_ALBUM ? feature(page).locator("img") : card(page, album.title).locator("img");
-}
-
-type PictureState = { webp: string | null; jpeg: string | null; width: string | null; height: string | null };
-
-function pictureState(link: Locator): Promise<PictureState> {
-  return link.evaluate((element) => {
-    const source = element.querySelector("source");
-    const image = element.querySelector("img");
-    return {
-      webp: source?.getAttribute("srcset") ?? null,
-      jpeg: image?.getAttribute("srcset") ?? null,
-      width: image?.getAttribute("width") ?? null,
-      height: image?.getAttribute("height") ?? null,
-    };
-  });
-}
-
-/** Where a link leads, resolved; the preview script may store hrefs as absolute URLs. */
-function linkTarget(link: Locator): Promise<string> {
-  return link.evaluate((element: HTMLAnchorElement) => element.href);
-}
-
-function albumUrl(page: Page, album: (typeof ALBUMS)[number]): string {
-  return new URL(`/${album.slug}/`, page.url()).href;
+function sceneCover(page: Page, album: (typeof ALBUMS)[number]): Locator {
+  return scene(page, album.title).locator("img");
 }
 
 function themeToggle(page: Page): Locator {
@@ -278,50 +233,38 @@ function setSiteTitle(page: Page, text: string): Promise<void> {
   }, text);
 }
 
-type TileRect = { top: number; left: number; right: number; height: number; width: number; ratio: number };
+type TileBox = Box & { shape: string };
 
-/** Album page tiles grouped into rows the way flex-wrap lays them out: a new row starts when a tile wraps left. */
-function justifiedRows(page: Page): Promise<TileRect[][]> {
+/** The mosaic's box and each tile's box and `tile--<shape>`, in page order. */
+function mosaicTiles(page: Page): Promise<{ grid: Box; tiles: TileBox[] }> {
   return page.locator(".mosaic").evaluate((mosaic) => {
-    const rows: TileRect[][] = [];
-    for (const tile of mosaic.querySelectorAll<HTMLElement>(".tile")) {
-      const rect = tile.getBoundingClientRect();
-      const entry = {
-        top: rect.top,
-        left: rect.left,
-        right: rect.right,
-        height: rect.height,
-        width: rect.width,
-        ratio: Number.parseFloat(tile.style.getPropertyValue("--ratio")),
-      };
-      const row = rows.at(-1);
-      if (!row || rect.left < row.at(-1)!.right) rows.push([entry]);
-      else row.push(entry);
-    }
-    return rows;
+    const toBox = (rect: DOMRect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+    const tiles = Array.from(mosaic.querySelectorAll(".tile"), (tile) => ({
+      ...toBox(tile.getBoundingClientRect()),
+      shape: Array.from(tile.classList).find((name) => name.startsWith("tile--"))?.slice("tile--".length) ?? "",
+    }));
+    return { grid: toBox(mosaic.getBoundingClientRect()), tiles };
   });
 }
 
-/** Whether the Bodoni Moda face has loaded and the browser can render it. */
-function bodoniState(page: Page): Promise<{ check: boolean; loaded: boolean }> {
-  return page.evaluate(async () => {
-    await document.fonts.ready;
-    const faces = Array.from(document.fonts as unknown as Iterable<FontFace>);
-    return {
-      check: document.fonts.check('700 40px "Bodoni Moda"'),
-      loaded: faces.some((face) => face.family.replace(/["']/g, "") === "Bodoni Moda" && face.status === "loaded"),
-    };
-  });
-}
-
-/** Load status of each Bodoni Moda face, once font loading has settled. */
-function bodoniStatuses(page: Page): Promise<string[]> {
-  return page.evaluate(async () => {
-    await document.fonts.ready;
-    return Array.from(document.fonts as unknown as Iterable<FontFace>)
-      .filter((face) => face.family.replace(/["']/g, "") === "Bodoni Moda")
-      .map((face) => face.status);
-  });
+/**
+ * How the tiles cover the mosaic: indexes of tiles outside it, pairs that overlap, and whether
+ * the tiles, each grown by one gap to the right and below, add up to the mosaic grown the same way,
+ * which holds only when the tiles close every row with `GAP_PX` gaps and leave no holes.
+ */
+function mosaicCoverage({ grid, tiles }: { grid: Box; tiles: TileBox[] }) {
+  const outside = tiles.flatMap((tile, index) => (isInside(tile, grid) ? [] : [index]));
+  const overlapping: [number, number][] = [];
+  tiles.forEach((a, i) =>
+    tiles.slice(i + 1).forEach((b, offset) => {
+      const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+      if (width > 1 && height > 1) overlapping.push([i, i + 1 + offset]);
+    }),
+  );
+  const tileArea = tiles.reduce((sum, tile) => sum + (tile.width + GAP_PX) * (tile.height + GAP_PX), 0);
+  const gridArea = (grid.width + GAP_PX) * (grid.height + GAP_PX);
+  return { outside, overlapping, covered: Math.abs(tileArea / gridArea - 1) < 0.001 };
 }
 
 function lightboxImageSrc(page: Page): Promise<string> {
@@ -354,58 +297,59 @@ function findBackdropPoint(page: Page): Promise<{ x: number; y: number } | null>
 test.describe("album index", () => {
   test("heading is Work", async ({ page }) => {
     await page.goto("/work/");
-    await expect(page.locator("h1.page-heading")).toHaveText("Work");
+    await expect(page.getByRole("heading", { level: 1, name: "Work", exact: true })).toHaveCount(1);
   });
 
-  test("meta line counts albums and photographs", async ({ page }) => {
+  test("Work heading is visually hidden", async ({ page }) => {
     await page.goto("/work/");
-    await expect(page.locator(".page-meta")).toHaveText(`${ALBUMS.length} albums · ${PHOTO_TOTAL} photographs`);
+    await expect(page.locator("h1.visually-hidden")).toHaveText("Work");
   });
 
-  test("feature card shows the first album", async ({ page }) => {
+  test("scenes show every album in order", async ({ page }) => {
     await page.goto("/work/");
-    await expect(feature(page).locator(".feature-title")).toHaveText(FIRST_ALBUM.title);
+    await expect(page.locator("section.scenes .scene-title")).toHaveText(ALBUMS.map((album) => album.title));
   });
 
-  test("feature card is labelled Latest album", async ({ page }) => {
+  test("scenes show photo counts", async ({ page }) => {
     await page.goto("/work/");
-    await expect(feature(page).locator(".feature-label")).toHaveText("Latest album");
+    await expect(page.locator("section.scenes .scene-count")).toHaveText(
+      ALBUMS.map((album) => `${photoCount(album.photos)} — View album →`),
+    );
   });
 
-  test("feature card shows the first album's photo count", async ({ page }) => {
+  test("scenes are numbered out of the album total", async ({ page }) => {
     await page.goto("/work/");
-    await expect(feature(page).locator(".feature-count")).toHaveText(photoCount(FIRST_ALBUM.photos));
+    const total = String(ALBUMS.length).padStart(2, "0");
+    await expect(page.locator("section.scenes .scene-number")).toHaveText(
+      ALBUMS.map((_, index) => `${String(index + 1).padStart(2, "0")} / ${total}`),
+    );
   });
 
-  test("feature card links to the first album", async ({ page }) => {
+  test("only the first scene's cover loads eagerly", async ({ page }) => {
+    await page.goto("/work/");
+    const loading = await page
+      .locator("section.scenes .scene img")
+      .evaluateAll((images) => images.map((image) => image.getAttribute("loading")));
+    expect(loading).toEqual(ALBUMS.map((_, index) => (index === 0 ? null : "lazy")));
+  });
+
+  test("first scene links to the first album", async ({ page }) => {
     await page.goto("/");
-    await feature(page).click();
+    await scene(page, FIRST_ALBUM.title).locator("a").click();
     await expect(page).toHaveURL(new RegExp(`/${FIRST_ALBUM.slug}/$`));
   });
 
-  test("grid lists the other albums in order", async ({ page }) => {
-    await page.goto("/work/");
-    await expect(page.locator(".album-grid .album-title")).toHaveText(GRID_ALBUMS.map((album) => album.title));
-  });
-
-  test("grid cards show photo counts", async ({ page }) => {
-    await page.goto("/work/");
-    await expect(page.locator(".album-grid .album-count")).toHaveText(
-      GRID_ALBUMS.map((album) => photoCount(album.photos)),
-    );
+  test("scenes link to their album pages", async ({ page }) => {
+    await page.goto("/");
+    await scene(page, "Book II").locator("a").click();
+    await expect(page).toHaveURL(/\/book-ii\/$/);
   });
 
   test("shows a cover image for every album", async ({ page }) => {
     await page.goto("/work/");
     for (const album of ALBUMS) {
-      await expectImageLoaded(indexCover(page, album));
+      await expectImageLoaded(sceneCover(page, album));
     }
-  });
-
-  test("cards link to their album pages", async ({ page }) => {
-    await page.goto("/");
-    await card(page, "Book II").locator("a").click();
-    await expect(page).toHaveURL(/\/book-ii\/$/);
   });
 
   test("marks Work as the current page", async ({ page }) => {
@@ -415,16 +359,38 @@ test.describe("album index", () => {
 
   test("footer shows the site title and build year", async ({ page }) => {
     await page.goto("/work/");
-    await expect(page.locator("footer.site-footer")).toContainText(
-      footerText(),
-    );
+    await expect(page.locator("footer.site-footer")).toContainText(footerText());
+  });
+
+  test("scenes snap into place", async ({ page }) => {
+    await page.goto("/work/");
+    await expect(page.locator("html")).toHaveCSS("scroll-snap-type", "y mandatory");
+  });
+
+  test("header stays fixed over the scenes", async ({ page }) => {
+    await page.goto("/work/");
+    await expect(page.locator(".site-header")).toHaveCSS("position", "fixed");
+  });
+
+  test("header is transparent over the scenes", async ({ page }) => {
+    await page.goto("/work/");
+    await expect(page.locator(".site-header")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  });
+
+  test.describe("with reduced motion", () => {
+    test.use({ reducedMotion: "reduce" });
+
+    test("scenes do not snap", async ({ page }) => {
+      await page.goto("/work/");
+      await expect(page.locator("html")).toHaveCSS("scroll-snap-type", "none");
+    });
   });
 
   for (const album of ALBUMS) {
     const rule = album.hasCoverFile ? "uses the cover.* file" : "uses the first photo";
     test(`${album.title} cover ${rule}`, async ({ page }) => {
       await page.goto("/work/");
-      const coverSrcset = await indexCover(page, album).getAttribute("srcset");
+      const coverSrcset = await sceneCover(page, album).getAttribute("srcset");
       await page.goto(`/${album.slug}/`);
       const firstPhotoSrcset = await page.locator(".tile img").first().getAttribute("srcset");
       if (album.hasCoverFile) {
@@ -434,191 +400,6 @@ test.describe("album index", () => {
       }
     });
   }
-});
-
-test.describe("album preview on hover", () => {
-  test.skip(({ isMobile }) => isMobile, "hover needs a mouse");
-
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/work/");
-  });
-
-  async function hoverPreviewedCard(page: Page): Promise<void> {
-    await card(page, PREVIEWED.title).locator("a").hover();
-  }
-
-  test("hovering a card shows its title in the feature", async ({ page }) => {
-    await hoverPreviewedCard(page);
-    await expect(feature(page).locator(".feature-title")).toHaveText(PREVIEWED.title);
-  });
-
-  test("hovering a card shows its photo count in the feature", async ({ page }) => {
-    await hoverPreviewedCard(page);
-    await expect(feature(page).locator(".feature-count")).toHaveText(photoCount(PREVIEWED.photos));
-  });
-
-  test("hovering a card points the feature link at its album", async ({ page }) => {
-    await hoverPreviewedCard(page);
-    await expect.poll(() => linkTarget(feature(page))).toBe(albumUrl(page, PREVIEWED));
-  });
-
-  test("hovering a card shows its cover in the feature", async ({ page }) => {
-    const expected = await pictureState(card(page, PREVIEWED.title));
-    await hoverPreviewedCard(page);
-    await expect.poll(() => pictureState(feature(page))).toEqual(expected);
-  });
-
-  test("hovering a card loads its cover in the feature", async ({ page }) => {
-    const candidates = await card(page, PREVIEWED.title)
-      .locator("a")
-      .evaluate((link) =>
-        Array.from(link.querySelectorAll("source, img"), (element) => element.getAttribute("srcset") ?? "")
-          .flatMap((srcset) => srcset.split(","))
-          .map((candidate) => new URL(candidate.trim().split(" ")[0], document.baseURI).href),
-      );
-    await hoverPreviewedCard(page);
-    const image = feature(page).locator("img");
-    await expectImageLoaded(image);
-    await expect
-      .poll(() => image.evaluate((element: HTMLImageElement, urls) => urls.includes(element.currentSrc), candidates))
-      .toBe(true);
-  });
-
-  test("hovering a card hides the Latest album label", async ({ page }) => {
-    await hoverPreviewedCard(page);
-    await expect(feature(page).locator(".feature-label")).toHaveCount(1);
-    await expect(feature(page).locator(".feature-label")).toBeHidden();
-  });
-
-  test("moving from a card onto the feature and clicking opens the previewed album", async ({ page }) => {
-    await hoverPreviewedCard(page);
-    // The full-bleed feature is taller than half the window: scroll its bottom edge to mid-screen.
-    await feature(page)
-      .locator(".feature-frame")
-      .evaluate((frame) => window.scrollBy(0, frame.getBoundingClientRect().bottom - window.innerHeight / 2));
-    const cardFrame = await boxOf(card(page, PREVIEWED.title).locator(".album-frame"));
-    const featureFrame = await boxOf(feature(page).locator(".feature-frame"));
-    const x = cardFrame.x + cardFrame.width / 2;
-    const fromY = cardFrame.y + 10;
-    const toY = featureFrame.y + featureFrame.height - 10;
-    const viewportHeight = page.viewportSize()?.height ?? 0;
-    // Straight up from the card must land on the feature frame, with both ends on screen.
-    expect(x).toBeLessThan(featureFrame.x + featureFrame.width);
-    expect(toY).toBeGreaterThan(0);
-    expect(fromY).toBeLessThan(viewportHeight);
-    await page.mouse.move(x, fromY);
-    await page.mouse.move(x, toY, { steps: 15 });
-    await page.mouse.click(x, toY);
-    await expect(page).toHaveURL(new RegExp(`/${PREVIEWED.slug}/$`));
-  });
-
-  test("leaving the albums section restores the first album's title", async ({ page }) => {
-    await hoverPreviewedCard(page);
-    await expect(feature(page).locator(".feature-title")).toHaveText(PREVIEWED.title);
-    await page.locator("h1.page-heading").hover();
-    await expect(feature(page).locator(".feature-title")).toHaveText(FIRST_ALBUM.title);
-  });
-
-  test("leaving the albums section shows the Latest album label again", async ({ page }) => {
-    await hoverPreviewedCard(page);
-    await expect(feature(page).locator(".feature-label")).toHaveCount(1);
-    await expect(feature(page).locator(".feature-label")).toBeHidden();
-    await page.locator("h1.page-heading").hover();
-    await expect(feature(page).locator(".feature-label")).toBeVisible();
-  });
-
-  test("leaving the albums section restores the first album's cover and link", async ({ page }) => {
-    const initial = { picture: await pictureState(feature(page)), href: albumUrl(page, FIRST_ALBUM) };
-    await hoverPreviewedCard(page);
-    await expect.poll(() => linkTarget(feature(page))).toBe(albumUrl(page, PREVIEWED));
-    await page.locator("h1.page-heading").hover();
-    await expect
-      .poll(async () => ({ picture: await pictureState(feature(page)), href: await linkTarget(feature(page)) }))
-      .toEqual(initial);
-  });
-
-  test("hovering a card sets the feature sizes from the card", async ({ page }) => {
-    const expected = await card(page, PREVIEWED.title).locator("a").getAttribute("data-feature-sizes");
-    expect(expected).toMatch(/vw$/);
-    await hoverPreviewedCard(page);
-    await expect.poll(() => featureSizes(page)).toEqual({ source: expected, image: expected });
-  });
-
-  test("leaving the albums section restores the feature sizes", async ({ page }) => {
-    const initial = await featureSizes(page);
-    await hoverPreviewedCard(page);
-    await expect(feature(page).locator(".feature-title")).toHaveText(PREVIEWED.title);
-    await page.locator("h1.page-heading").hover();
-    await expect.poll(() => featureSizes(page)).toEqual(initial);
-  });
-
-  test("mouse leaving the section keeps a preview the keyboard focus is on", async ({ page }) => {
-    await tabTo(page, card(page, PREVIEWED.title).locator("a"));
-    await expect(feature(page).locator(".feature-title")).toHaveText(PREVIEWED.title);
-    await feature(page).locator(".feature-frame").hover();
-    await page.locator("h1.page-heading").hover();
-    await expect(feature(page).locator(".feature-title")).toHaveText(PREVIEWED.title);
-  });
-});
-
-test.describe("album preview on keyboard focus", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/work/");
-  });
-
-  test("tabbing to a card shows its album in the feature", async ({ page }) => {
-    await tabTo(page, card(page, PREVIEWED.title).locator("a"));
-    await expect(feature(page).locator(".feature-title")).toHaveText(PREVIEWED.title);
-  });
-
-  test("tabbing back from a card to the feature keeps the preview", async ({ page }) => {
-    const firstCard = GRID_ALBUMS[0];
-    await tabTo(page, card(page, firstCard.title).locator("a"));
-    await expect(feature(page).locator(".feature-title")).toHaveText(firstCard.title);
-    await page.keyboard.press("Shift+Tab");
-    await expect(feature(page)).toBeFocused();
-    await expect.poll(() => linkTarget(feature(page))).toBe(albumUrl(page, firstCard));
-  });
-
-  test("focus leaving the albums section restores the first album", async ({ page }) => {
-    await tabTo(page, card(page, PREVIEWED.title).locator("a"));
-    await expect(feature(page).locator(".feature-title")).toHaveText(PREVIEWED.title);
-    await page.locator(".site-title").focus();
-    await expect(feature(page).locator(".feature-title")).toHaveText(FIRST_ALBUM.title);
-  });
-});
-
-test.describe("album preview by pointer type", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/work/");
-  });
-
-  /** Dispatches pointerenter on the previewed card and returns the feature title right after. */
-  function featureTitleAfterPointerEnter(page: Page, pointerType: string): Promise<string> {
-    return card(page, PREVIEWED.title)
-      .locator("a")
-      .evaluate((link, type) => {
-        link.dispatchEvent(new PointerEvent("pointerenter", { pointerType: type }));
-        return document.querySelector(".feature-title")?.textContent?.trim() ?? "";
-      }, pointerType);
-  }
-
-  test("a mouse entering a card previews it", async ({ page }) => {
-    expect(await featureTitleAfterPointerEnter(page, "mouse")).toBe(PREVIEWED.title);
-  });
-
-  test("a touch entering a card does not preview it", async ({ page }) => {
-    expect(await featureTitleAfterPointerEnter(page, "touch")).toBe(FIRST_ALBUM.title);
-  });
-
-  test.describe("on touch screens", () => {
-    test.skip(({ isMobile }) => !isMobile, "taps need a touch screen");
-
-    test("tapping a card opens its album", async ({ page }) => {
-      await card(page, PREVIEWED.title).locator("a").tap();
-      await expect(page).toHaveURL(new RegExp(`/${PREVIEWED.slug}/$`));
-    });
-  });
 });
 
 /** Desktop windows from wide to just above the 767px phone breakpoint; the default project window is 1440x900. */
@@ -653,25 +434,26 @@ for (const { width, height } of DESKTOP_VIEWPORTS) {
       expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
     });
 
-    test("feature frame is 21:9", async ({ page }) => {
+    test("first scene fills the window", async ({ page }) => {
       await page.goto("/work/");
-      const frame = await boxOf(feature(page).locator(".feature-frame"));
-      expect(frame.width / frame.height).toBeCloseTo(21 / 9, 1);
-    });
-
-    test("feature frame spans the full window width", async ({ page }) => {
-      await page.goto("/work/");
-      const frame = await boxOf(feature(page).locator(".feature-frame"));
+      const box = await boxOf(page.locator(".scene").first());
       const full = await layoutWidth(page);
-      expect({ left: Math.round(frame.x), width: Math.round(frame.width) }).toEqual({ left: 0, width: full });
+      expect({ x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) }).toEqual({
+        x: 0,
+        y: 0,
+        width: full,
+        height,
+      });
     });
 
-    test("feature text sits inside its frame", async ({ page }) => {
-      await page.goto("/work/");
-      const frame = await boxOf(feature(page).locator(".feature-frame"));
-      const text = await boxOf(feature(page).locator(".feature-text"));
-      expect(isInside(text, frame), `text ${JSON.stringify(text)} frame ${JSON.stringify(frame)}`).toBe(true);
-    });
+    for (const album of [FIRST_ALBUM, LONG_TITLE_ALBUM]) {
+      test(`${album.slug} scene text sits inside its scene`, async ({ page }) => {
+        await page.goto("/work/");
+        const frame = await boxOf(scene(page, album.title));
+        const text = await boxOf(scene(page, album.title).locator(".scene-text"));
+        expect(isInside(text, frame), `text ${JSON.stringify(text)} scene ${JSON.stringify(frame)}`).toBe(true);
+      });
+    }
   });
 }
 
@@ -682,101 +464,26 @@ test.describe("album index on desktop", () => {
     await page.goto("/work/");
   });
 
-  test("cards sit two to a row with a lone last card", async ({ page }) => {
-    const tops = await page
-      .locator(".album-grid .album-card")
-      .evaluateAll((cards) => cards.map((element) => Math.round(element.getBoundingClientRect().top)));
-    const perRow = [...new Set(tops)].map((top) => tops.filter((value) => value === top).length);
-    expect(perRow).toEqual([2, 2, 1]);
-  });
-
-  test("card frames all have the same height", async ({ page }) => {
-    const heights = await page
-      .locator(".album-grid .album-frame")
-      .evaluateAll((frames) => frames.map((element) => element.getBoundingClientRect().height));
-    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
-  });
-
-  test("each grid row spans the full grid width", async ({ page }) => {
-    const worstGap = await page.locator(".album-grid").evaluate((grid) => {
-      const style = getComputedStyle(grid);
-      const box = grid.getBoundingClientRect();
-      const left = box.left + Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.borderLeftWidth);
-      const right = box.right - Number.parseFloat(style.paddingRight) - Number.parseFloat(style.borderRightWidth);
-      const rows = new Map<number, DOMRect[]>();
-      for (const element of grid.querySelectorAll(".album-card")) {
-        const rect = element.getBoundingClientRect();
-        rows.set(Math.round(rect.top), [...(rows.get(Math.round(rect.top)) ?? []), rect]);
-      }
-      return Math.max(
-        ...Array.from(rows.values(), (rects) =>
-          Math.max(
-            Math.abs(Math.min(...rects.map((rect) => rect.left)) - left),
-            Math.abs(right - Math.max(...rects.map((rect) => rect.right))),
-          ),
-        ),
-      );
-    });
-    expect(worstGap).toBeLessThanOrEqual(3);
-  });
-
-  test("album grid spans the full window width", async ({ page }) => {
-    const grid = await boxOf(page.locator(".album-grid"));
-    const full = await layoutWidth(page);
-    expect({ left: Math.round(grid.x), width: Math.round(grid.width) }).toEqual({ left: 0, width: full });
-  });
-
-  test("span-6 card frames are 3:2", async ({ page }) => {
-    const ratios = await page
-      .locator(".album-card--span-6 .album-frame")
-      .evaluateAll((frames) =>
-        frames.map((element) => element.getBoundingClientRect().width / element.getBoundingClientRect().height),
-      );
-    expect({ count: ratios.length, worst: Math.max(...ratios.map((ratio) => Math.abs(ratio - 3 / 2))) < 0.03 }).toEqual({
-      count: 4,
-      worst: true,
-    });
-  });
-
-  test("the lone last card spans the full grid width", async ({ page }) => {
-    const lastCard = page.locator(".album-grid .album-card").last();
-    await expect(lastCard).toHaveClass(/\balbum-card--span-12\b/);
-    const cardBox = await boxOf(lastCard);
-    const grid = await boxOf(page.locator(".album-grid"));
-    expect(Math.abs(cardBox.width - grid.width)).toBeLessThanOrEqual(1);
-  });
-
-  test("the lone last card frame is 3:1", async ({ page }) => {
-    const frame = await boxOf(card(page, LAST_ALBUM.title).locator(".album-frame"));
-    expect(frame.width / frame.height).toBeCloseTo(3, 1);
-  });
-
-  for (const album of [PREVIEWED, LAST_ALBUM]) {
-    test(`${album.title} card title and count sit inside its frame`, async ({ page }) => {
-      const frame = await boxOf(card(page, album.title).locator(".album-frame"));
-      const title = await boxOf(card(page, album.title).locator(".album-title"));
-      const count = await boxOf(card(page, album.title).locator(".album-count"));
-      expect([isInside(title, frame), isInside(count, frame)]).toEqual([true, true]);
-    });
-  }
-
-  test("a long card title stays inside its frame", async ({ page }) => {
-    const frame = await boxOf(card(page, LONG_TITLE_ALBUM.title).locator(".album-frame"));
-    const title = await boxOf(card(page, LONG_TITLE_ALBUM.title).locator(".album-title"));
-    expect(isInside(title, frame), `title ${JSON.stringify(title)} frame ${JSON.stringify(frame)}`).toBe(true);
-  });
-
-  test("feature text sits at the bottom left of its frame", async ({ page }) => {
-    const frame = await boxOf(feature(page).locator(".feature-frame"));
-    const text = await boxOf(feature(page).locator(".feature-text"));
+  test("scene text sits at the bottom left of its scene", async ({ page }) => {
+    const frame = await boxOf(scene(page, FIRST_ALBUM.title));
+    const text = await boxOf(scene(page, FIRST_ALBUM.title).locator(".scene-text"));
     expect({
       nearLeft: text.x - frame.x <= 60,
       nearBottom: frame.y + frame.height - (text.y + text.height) <= 60,
     }).toEqual({ nearLeft: true, nearBottom: true });
   });
 
-  test("hovering a card zooms its cover", async ({ page }) => {
-    const target = card(page, PREVIEWED.title);
+  test("scene number sits at the top right of its scene", async ({ page }) => {
+    const frame = await boxOf(scene(page, FIRST_ALBUM.title));
+    const number = await boxOf(scene(page, FIRST_ALBUM.title).locator(".scene-number"));
+    expect({
+      nearRight: frame.x + frame.width - (number.x + number.width) <= 60,
+      nearTop: number.y - frame.y <= 100,
+    }).toEqual({ nearRight: true, nearTop: true });
+  });
+
+  test("hovering a scene zooms its cover", async ({ page }) => {
+    const target = scene(page, FIRST_ALBUM.title);
     await target.locator("a").hover();
     await expect.poll(() => imageScale(target.locator("img")), { timeout: 3_000 }).toBeCloseTo(1.03, 2);
   });
@@ -784,8 +491,8 @@ test.describe("album index on desktop", () => {
   test.describe("with reduced motion", () => {
     test.use({ reducedMotion: "reduce" });
 
-    test("hovering a card neither zooms nor animates its cover", async ({ page }) => {
-      const target = card(page, PREVIEWED.title);
+    test("hovering a scene neither zooms nor animates its cover", async ({ page }) => {
+      const target = scene(page, FIRST_ALBUM.title);
       await target.locator("a").hover();
       await expect.poll(() => target.evaluate((element) => element.matches(":hover"))).toBe(true);
       const state = await target.locator("img").evaluate((image) => ({
@@ -796,20 +503,18 @@ test.describe("album index on desktop", () => {
     });
   });
 
-  test("site title is centred above the navigation", async ({ page }) => {
+  test("site title sits left of the navigation on one row", async ({ page }) => {
     const title = await boxOf(page.locator(".site-header .site-title"));
     const links = await page
       .locator(".site-header .site-nav a")
       .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect()));
     const navLeft = Math.min(...links.map((rect) => rect.left));
-    const navRight = Math.max(...links.map((rect) => rect.right));
-    const navTop = Math.min(...links.map((rect) => rect.top));
-    const centre = (await layoutWidth(page)) / 2;
+    const titleMiddle = title.y + title.height / 2;
     expect({
-      titleAboveNav: title.y + title.height <= navTop + 1,
-      titleCentred: Math.abs(title.x + title.width / 2 - centre) <= 2,
-      navCentred: Math.abs((navLeft + navRight) / 2 - centre) <= 2,
-    }).toEqual({ titleAboveNav: true, titleCentred: true, navCentred: true });
+      titleAtLeftInset: Math.abs(title.x - 40) <= 2,
+      titleLeftOfNav: title.x + title.width <= navLeft,
+      sameRow: links.every((rect) => titleMiddle >= rect.top && titleMiddle <= rect.bottom),
+    }).toEqual({ titleAtLeftInset: true, titleLeftOfNav: true, sameRow: true });
   });
 
   test("theme toggle sits at the top right, level with the title", async ({ page }) => {
@@ -817,36 +522,55 @@ test.describe("album index on desktop", () => {
     const title = await boxOf(page.locator(".site-header .site-title"));
     const full = await layoutWidth(page);
     const toggleMiddle = toggle.y + toggle.height / 2;
+    // 40px header padding less the toggle's -8px margin.
     expect({
-      rightInset: Math.abs(full - (toggle.x + toggle.width) - 24) <= 4,
+      rightInset: Math.abs(full - (toggle.x + toggle.width) - 32) <= 4,
       levelWithTitle: toggleMiddle >= title.y && toggleMiddle <= title.y + title.height,
     }).toEqual({ rightInset: true, levelWithTitle: true });
   });
 });
 
 for (const colorScheme of ["light", "dark"] as const) {
-  test.describe(`overlay text in the ${colorScheme} theme`, () => {
+  test.describe(`text on photos in the ${colorScheme} theme`, () => {
     test.use({ colorScheme });
 
-    for (const selector of [".feature-title", ".feature-count", ".album-title", ".album-count"]) {
-      test(`${selector} is white`, async ({ page }) => {
-        await page.goto("/work/");
-        await expect(page.locator(`section.albums ${selector}`).first()).toHaveCSS("color", OVERLAY_TEXT);
+    const cases = [
+      { path: "/work/", selector: ".scene-title", color: OVERLAY_TEXT },
+      { path: "/work/", selector: ".scene-count", color: ON_PHOTO_MUTED },
+      { path: "/work/", selector: ".scene-number", color: ON_PHOTO_MUTED },
+      { path: "/work/", selector: ".site-header .site-title", color: OVERLAY_TEXT },
+      { path: "/work/", selector: ".site-nav a[aria-current]", color: OVERLAY_TEXT },
+      { path: `/${FIRST_ALBUM.slug}/`, selector: ".album-heading", color: OVERLAY_TEXT },
+      { path: `/${FIRST_ALBUM.slug}/`, selector: ".album-count", color: ON_PHOTO_MUTED },
+      { path: `/${FIRST_ALBUM.slug}/`, selector: ".site-header .site-title", color: OVERLAY_TEXT },
+      { path: `/${FIRST_ALBUM.slug}/`, selector: ".pager-text > span", color: OVERLAY_TEXT },
+      { path: `/${FIRST_ALBUM.slug}/`, selector: ".pager-prev span", color: OVERLAY_TEXT },
+    ];
+    for (const { path, selector, color } of cases) {
+      test(`${selector} on ${path} is readable white`, async ({ page }) => {
+        await page.goto(path);
+        await expect(page.locator(selector).first()).toHaveCSS("color", color);
       });
     }
   });
 }
 
-test.describe("display font", () => {
-  test("Bodoni Moda loads", async ({ page }) => {
-    await page.goto("/work/");
-    await expect.poll(() => bodoniState(page)).toEqual({ check: true, loaded: true });
-  });
-
-  for (const selector of [".site-header .site-title", "h1.page-heading", ".feature-title"]) {
-    test(`${selector} is set in Bodoni Moda`, async ({ page }) => {
-      await page.goto("/work/");
-      await expect(page.locator(selector)).toHaveCSS("font-family", /^"?Bodoni Moda"?,/);
+test.describe("display type", () => {
+  for (const { path, selector } of [
+    { path: "/work/", selector: ".scene-title" },
+    { path: `/${FIRST_ALBUM.slug}/`, selector: "h1.album-heading" },
+    { path: `/${FIRST_ALBUM.slug}/`, selector: ".pager-text > span" },
+  ]) {
+    test(`${selector} is heavy uppercase Helvetica`, async ({ page }) => {
+      await page.goto(path);
+      const style = await page
+        .locator(selector)
+        .first()
+        .evaluate((element) => {
+          const computed = getComputedStyle(element);
+          return { family: computed.fontFamily, weight: computed.fontWeight, transform: computed.textTransform };
+        });
+      expect(style).toEqual({ family: SANS, weight: "900", transform: "uppercase" });
     });
   }
 
@@ -855,24 +579,14 @@ test.describe("display font", () => {
     await expect(page.locator(".site-header .site-title")).toHaveCSS("font-weight", "700");
   });
 
-  test.describe("when the font file fails to load", () => {
-    test.beforeEach(async ({ page }) => {
-      await page.route("**/*.woff2", (route) => route.abort());
-      await page.goto("/work/");
+  test("no web font is requested", async ({ page }) => {
+    const fonts: string[] = [];
+    page.on("request", (request) => {
+      if (request.resourceType() === "font") fonts.push(request.url());
     });
-
-    test("the font face is reported as failed", async ({ page }) => {
-      await expect.poll(() => bodoniStatuses(page)).toEqual(["error"]);
-    });
-
-    test("the site title still renders", async ({ page }) => {
-      await expect(page.locator(".site-header .site-title")).toBeVisible();
-    });
-
-    test("the page has no horizontal overflow", async ({ page }) => {
-      await page.evaluate(() => document.fonts.ready);
-      expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
-    });
+    await page.goto("/work/");
+    await page.evaluate(() => document.fonts.ready);
+    expect(fonts).toEqual([]);
   });
 });
 
@@ -883,45 +597,49 @@ test.describe("album index on phones", () => {
     await page.goto("/work/");
   });
 
-  test("feature and cards form a single column", async ({ page }) => {
+  test("scenes form a single column", async ({ page }) => {
     const lefts = await page
-      .locator(".feature-frame, .album-grid .album-card")
+      .locator(".scene")
       .evaluateAll((elements) => elements.map((element) => Math.round(element.getBoundingClientRect().left)));
     expect(new Set(lefts).size).toBe(1);
   });
 
-  test("feature and cards span the full screen width", async ({ page }) => {
+  test("scenes span the full screen width", async ({ page }) => {
     const widths = await page
-      .locator(".feature-frame, .album-grid .album-card")
+      .locator(".scene")
       .evaluateAll((elements) => elements.map((element) => Math.round(element.getBoundingClientRect().width)));
     const full = await layoutWidth(page);
     expect(widths).toEqual(widths.map(() => full));
   });
 
-  test("feature text sits inside its frame", async ({ page }) => {
-    const frame = await boxOf(feature(page).locator(".feature-frame"));
-    const text = await boxOf(feature(page).locator(".feature-text"));
-    expect(isInside(text, frame), `text ${JSON.stringify(text)} frame ${JSON.stringify(frame)}`).toBe(true);
+  test("first scene fills the screen height", async ({ page }) => {
+    const box = await boxOf(page.locator(".scene").first());
+    const height = await page.evaluate(() => window.innerHeight);
+    expect(Math.abs(box.height - height), `scene ${box.height}px, screen ${height}px`).toBeLessThanOrEqual(2);
   });
 
-  test("feature frame is 4:5", async ({ page }) => {
-    const frame = await boxOf(feature(page).locator(".feature-frame"));
-    expect(frame.width / frame.height).toBeCloseTo(4 / 5, 1);
-  });
+  for (const album of [FIRST_ALBUM, LONG_TITLE_ALBUM]) {
+    test(`${album.slug} scene text sits inside its scene`, async ({ page }) => {
+      const frame = await boxOf(scene(page, album.title));
+      const text = await boxOf(scene(page, album.title).locator(".scene-text"));
+      expect(isInside(text, frame), `text ${JSON.stringify(text)} scene ${JSON.stringify(frame)}`).toBe(true);
+    });
+  }
 
-  test("every card frame is 3:2, including the lone last card", async ({ page }) => {
-    const ratios = await page
-      .locator(".album-frame")
-      .evaluateAll((frames) =>
-        frames.map((element) => element.getBoundingClientRect().width / element.getBoundingClientRect().height),
-      );
-    expect(Math.max(...ratios.map((ratio) => Math.abs(ratio - 3 / 2)))).toBeLessThan(0.03);
-  });
-
-  test("site title sits above the navigation", async ({ page }) => {
+  test("header stays inside the 20px gutters", async ({ page }) => {
     const title = await boxOf(page.locator(".site-header .site-title"));
-    const nav = await boxOf(page.locator(".site-header .site-nav a").first());
-    expect(nav.y).toBeGreaterThanOrEqual(title.y + title.height - 1);
+    const toggle = await boxOf(themeToggle(page));
+    const full = await layoutWidth(page);
+    // 20px header padding; the toggle's -8px margin pulls it 8px further out.
+    expect({
+      titleLeft: Math.abs(title.x - 20) <= 2,
+      toggleRight: Math.abs(full - (toggle.x + toggle.width) - 12) <= 4,
+    }).toEqual({ titleLeft: true, toggleRight: true });
+  });
+
+  test("tapping a scene opens its album", async ({ page }) => {
+    await scene(page, MIDDLE_ALBUM.title).locator("a").tap();
+    await expect(page).toHaveURL(new RegExp(`/${MIDDLE_ALBUM.slug}/$`));
   });
 
   test("page has no horizontal overflow", async ({ page }) => {
@@ -1095,8 +813,15 @@ test.describe("theme transition", () => {
   });
 
   test("nested text reaches its final colour by the end of the fade", async ({ page }) => {
-    // On /work/ the first nav link is the current page (--fg); the meta line and footer are --muted.
-    const selectors = [".site-title", ".site-nav a", ".theme-toggle", ".page-meta", ".site-footer"];
+    // Text pages keep the header in theme colours: the current link is --fg, other links and the footer --muted.
+    await page.goto("/about/");
+    const targets = [
+      { selector: ".site-title", final: DARK_FG },
+      { selector: ".site-nav a[aria-current]", final: DARK_FG },
+      { selector: ".theme-toggle", final: DARK_FG },
+      { selector: ".site-nav a:not([aria-current])", final: DARK_MUTED },
+      { selector: ".site-footer", final: DARK_MUTED },
+    ];
     const sample = await page.evaluate(async (selectors) => {
       const colours = () => selectors.map((selector) => getComputedStyle(document.querySelector(selector)!).color);
       document.querySelector<HTMLButtonElement>(".site-nav button.theme-toggle")!.click();
@@ -1105,15 +830,17 @@ test.describe("theme transition", () => {
       const atEnd = colours();
       const fading = document.documentElement.classList.contains("theme-transition");
       return { fading, atEnd };
-    }, selectors);
-    const channels = (colour: string) => (/^rgb\((\d+), (\d+), (\d+)\)$/.exec(colour) ?? []).slice(1).map(Number);
-    const finalChannels = [DARK_FG_CHANNEL, DARK_FG_CHANNEL, DARK_FG_CHANNEL, DARK_MUTED_CHANNEL, DARK_MUTED_CHANNEL].map(
-      (value) => [value, value, value],
-    );
+    }, targets.map((target) => target.selector));
+    // Red, green, blue, and alpha scaled to 0-255, so one tolerance fits every channel.
+    const channels = (colour: string) => {
+      const match = /^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/.exec(colour);
+      return match ? [...match.slice(1, 4).map(Number), Number(match[4] ?? 1) * 255] : [];
+    };
     const farthest = Math.max(
       ...sample.atEnd.flatMap((colour, index) => {
         const actual = channels(colour);
-        return actual.length === 3 ? actual.map((value, channel) => Math.abs(value - finalChannels[index][channel])) : [Infinity];
+        const expected = channels(targets[index].final);
+        return actual.length === 4 ? actual.map((value, channel) => Math.abs(value - expected[channel])) : [Infinity];
       }),
     );
     expect({ fading: sample.fading, withinFewUnits: farthest <= 4 }, `colours ${sample.atEnd.join(" | ")}`).toEqual({
@@ -1363,7 +1090,7 @@ test.describe("album page", () => {
   });
 
   test("Previous links to the preceding album", async ({ page }) => {
-    await page.goto(`/${PREVIEWED.slug}/`);
+    await page.goto(`/${MIDDLE_ALBUM.slug}/`);
     await page.locator(".album-pager a.pager-prev").click();
     await expect(page).toHaveURL(new RegExp(`/${ALBUMS[1].slug}/$`));
   });
@@ -1388,15 +1115,31 @@ test.describe("album page", () => {
     await expect(page.locator(".album-pager a.pager-prev")).toHaveText(endsWithTitle(LAST_ALBUM.title));
   });
 
-  test("Previous sits left of Next on desktop and above it on phones", async ({ page, isMobile }) => {
-    await page.goto(`/${PREVIEWED.slug}/`);
+  test("Previous sits in the top left corner of the Next banner", async ({ page }) => {
+    await page.goto(`/${MIDDLE_ALBUM.slug}/`);
     const previous = await boxOf(page.locator(".album-pager a.pager-prev"));
     const next = await boxOf(page.locator(".album-pager a.pager-next"));
-    if (isMobile) {
-      expect(previous.y + previous.height).toBeLessThanOrEqual(next.y + 1);
-    } else {
-      expect(previous.x + previous.width).toBeLessThanOrEqual(next.x + 1);
-    }
+    expect({
+      inside: isInside(previous, next),
+      nearLeft: previous.x - next.x <= 48,
+      nearTop: previous.y - next.y <= 32,
+    }).toEqual({ inside: true, nearLeft: true, nearTop: true });
+  });
+
+  test("Next banner shows the next album's cover", async ({ page }) => {
+    await page.goto("/work/");
+    const nextCover = await sceneCover(page, ALBUMS[1]).getAttribute("srcset");
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    const banner = page.locator(".album-pager a.pager-next img");
+    await expectImageLoaded(banner);
+    expect(await banner.getAttribute("srcset")).toBe(nextCover);
+  });
+
+  test("Next banner spans the full window width", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    const banner = await boxOf(page.locator(".album-pager a.pager-next"));
+    const full = await layoutWidth(page);
+    expect({ left: Math.round(banner.x), width: Math.round(banner.width) }).toEqual({ left: 0, width: full });
   });
 
   test("has the album title in the page title", async ({ page }) => {
@@ -1414,24 +1157,47 @@ test.describe("album page", () => {
     await expect(page.locator("h1.album-heading")).toHaveText("Portraits");
   });
 
-  test("heading is not uppercased", async ({ page }) => {
-    await page.goto("/portraits/");
-    await expect(page.locator("h1.album-heading")).toHaveCSS("text-transform", "none");
+  test("hero shows the album cover", async ({ page }) => {
+    await page.goto("/work/");
+    const cover = await sceneCover(page, FIRST_ALBUM).getAttribute("srcset");
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    const hero = page.locator("section.album-hero img");
+    await expectImageLoaded(hero);
+    expect(await hero.getAttribute("srcset")).toBe(cover);
   });
 
-  test("heading is set in a serif face", async ({ page }) => {
-    await page.goto("/portraits/");
-    await expect(page.locator("h1.album-heading")).toHaveCSS("font-family", /Georgia/);
+  test("hero comes before the photos", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const hero = await boxOf(page.locator("section.album-hero"));
+    const firstTile = await boxOf(page.locator(".tile").first());
+    expect(hero.y + hero.height).toBeLessThanOrEqual(firstTile.y + 1);
   });
 
-  test("heading is set in Bodoni Moda", async ({ page }) => {
-    await page.goto("/portraits/");
-    await expect(page.locator("h1.album-heading")).toHaveCSS("font-family", /^"?Bodoni Moda"?,/);
+  test("hero is 88% of the window height", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const hero = await boxOf(page.locator("section.album-hero"));
+    const height = await page.evaluate(() => window.innerHeight);
+    expect(Math.abs(hero.height - 0.88 * height), `hero ${hero.height}px, window ${height}px`).toBeLessThanOrEqual(2);
   });
 
-  test("heading is centred", async ({ page }) => {
-    await page.goto("/portraits/");
-    await expect(page.locator("h1.album-heading")).toHaveCSS("text-align", "center");
+  for (const album of [LANDSCAPES, LONG_TITLE_ALBUM]) {
+    test(`${album.slug} heading and count sit inside the hero`, async ({ page }) => {
+      await page.goto(`/${album.slug}/`);
+      const hero = await boxOf(page.locator("section.album-hero"));
+      const heading = await boxOf(page.locator("h1.album-heading"));
+      const count = await boxOf(page.locator(".album-count"));
+      expect([isInside(heading, hero), isInside(count, hero)]).toEqual([true, true]);
+    });
+  }
+
+  test("hero text sits at the bottom left of the hero", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const hero = await boxOf(page.locator("section.album-hero"));
+    const text = await boxOf(page.locator(".album-hero-text"));
+    expect({
+      nearLeft: text.x - hero.x <= 48,
+      nearBottom: hero.y + hero.height - (text.y + text.height) <= 56,
+    }).toEqual({ nearLeft: true, nearBottom: true });
   });
 
   test("shows the photo count", async ({ page }) => {
@@ -1456,20 +1222,116 @@ test.describe("album page", () => {
   });
 });
 
+function heroLink(page: Page, album: (typeof ALBUMS)[number]): Locator {
+  return page.getByRole("link", { name: `Open cover photo of ${album.title}`, exact: true });
+}
+
+test.describe("album hero cover link", () => {
+  /** FIRST_ALBUM has a separate cover.* file, so the viewer shows it before the photos. */
+  const coverFileTotal = FIRST_ALBUM.photos + 1;
+
+  test("clicking the hero opens the viewer on the cover file", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    await heroLink(page, FIRST_ALBUM).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1, coverFileTotal));
+  });
+
+  test("with a cover file, a tile opens one past its position", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    await photoLinks(page).first().click();
+    await expect(lightboxCounter(page)).toHaveText(counter(2, coverFileTotal));
+  });
+
+  for (const selector of ["h1.album-heading", ".album-hero .album-count"]) {
+    test(`clicking ${selector} does not open the viewer`, async ({ page }) => {
+      await page.goto(`/${FIRST_ALBUM.slug}/`);
+      const box = await boxOf(page.locator(selector));
+      await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+      await page.waitForTimeout(300);
+      await expect(lightbox(page)).toBeHidden();
+    });
+  }
+
+  test("clicking the empty end of the caption strip opens the viewer on the cover", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    const caption = await boxOf(page.locator(".album-hero-text"));
+    await page.mouse.click(caption.x + caption.width - 2, caption.y + caption.height / 2);
+    await expect(lightboxCounter(page)).toHaveText(counter(1, coverFileTotal));
+  });
+
+  test("clicking the cover above the caption opens the viewer on the cover", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    const caption = await boxOf(page.locator(".album-hero-text"));
+    await page.mouse.click(caption.x + caption.width / 2, caption.y - 20);
+    await expect(lightboxCounter(page)).toHaveText(counter(1, coverFileTotal));
+  });
+
+  test("closing after opening from the hero returns focus to the hero", async ({ page }) => {
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    await heroLink(page, FIRST_ALBUM).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1, coverFileTotal));
+    await page.keyboard.press("Escape");
+    await expect(heroLink(page, FIRST_ALBUM)).toBeFocused();
+  });
+
+  test("without a cover file, the hero opens the first photo once", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    await heroLink(page, LANDSCAPES).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1));
+  });
+
+  test("without a cover file, closing after opening from the hero focuses the first tile", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    await heroLink(page, LANDSCAPES).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1));
+    await page.keyboard.press("Escape");
+    await expect(photoLinks(page).first()).toBeFocused();
+  });
+
+  test("without a cover file, the hero shows the first tile's image", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const href = await photoLinks(page).first().evaluate((link: HTMLAnchorElement) => link.href);
+    await heroLink(page, LANDSCAPES).click();
+    await expect.poll(() => lightboxImageSrc(page)).toBe(href);
+  });
+
+  test("without a cover file, Next from the hero shows the second photo", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const href = await photoLinks(page).nth(1).evaluate((link: HTMLAnchorElement) => link.href);
+    await heroLink(page, LANDSCAPES).click();
+    await expect(lightboxCounter(page)).toHaveText(counter(1));
+    await lightbox(page).getByRole("button", { name: "Next photo", exact: true }).click();
+    await expect.poll(() => lightboxImageSrc(page)).toBe(href);
+  });
+
+  test("album and index scene titles are 5vw, 9vw on phones", async ({ page }) => {
+    const fontSize = (locator: Locator) =>
+      locator.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    const width = page.viewportSize()!.width;
+    const expected = width * (width <= 767 ? 0.09 : 0.05);
+    await page.goto("/work/");
+    expect(await fontSize(page.locator(".scene-title").first())).toBeCloseTo(expected, 0);
+    await page.goto(`/${FIRST_ALBUM.slug}/`);
+    expect(await fontSize(page.locator("h1.album-heading"))).toBeCloseTo(expected, 0);
+  });
+});
+
 test.describe("single-photo album", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(`/${SINGLE_PHOTO_ALBUM.slug}/`);
   });
 
-  test("its only tile is not stretched to fill a desktop row", async ({ page, isMobile }) => {
-    test.skip(isMobile, "phones show every tile full width");
-    const tile = await boxOf(page.locator(".tile"));
-    const rowHeight = (ROW_HEIGHT_VW * (await page.evaluate(() => window.innerWidth))) / 100;
-    expect(Math.abs(tile.height - rowHeight), `tile ${tile.height}px, row ${rowHeight}px`).toBeLessThanOrEqual(2);
+  test("its only tile is a full tile, four columns wide and two rows tall on desktop", async ({ page, isMobile }) => {
+    test.skip(isMobile, "phones show every tile as a square");
+    const { grid, tiles } = await mosaicTiles(page);
+    const twoRows = 2 * ((grid.width - 3 * GAP_PX) / 4) + GAP_PX;
+    expect(tiles.map((tile) => [Math.round(tile.width), Math.round(tile.height)])).toEqual([
+      [Math.round(grid.width), Math.round(twoRows)],
+    ]);
   });
 
   test("its only tile is full width on phones", async ({ page, isMobile }) => {
-    test.skip(!isMobile, "desktop rows keep the base row height");
+    test.skip(!isMobile, "desktop shows a two-row full tile");
     const tile = await boxOf(page.locator(".tile"));
     expect(Math.round(tile.width)).toBe(await layoutWidth(page));
   });
@@ -1685,74 +1547,60 @@ for (const colorScheme of ["light", "dark"] as const) {
   });
 }
 
+/** Mosaic grids wide enough for more than one column: 4 above 1024px, 2 from 768 to 1024px. */
+const MOSAIC_GRIDS = [
+  { name: "desktop", viewport: { width: 1440, height: 900 }, columns: 4 },
+  { name: "tablet", viewport: { width: 1024, height: 768 }, columns: 2 },
+];
+
+for (const { name, viewport, columns } of MOSAIC_GRIDS) {
+  test.describe(`album mosaic on a ${name} at ${viewport.width}px`, () => {
+    test.skip(({ isMobile }) => isMobile, "a desktop window");
+    test.use({ viewport });
+
+    test(`mosaic has ${columns} columns`, async ({ page }) => {
+      await page.goto(`/${LANDSCAPES.slug}/`);
+      const tracks = await page
+        .locator(".mosaic")
+        .evaluate((mosaic) => getComputedStyle(mosaic).gridTemplateColumns.split(" ").length);
+      expect(tracks).toBe(columns);
+    });
+
+    for (const album of ALBUMS) {
+      test(`${album.slug} tiles cover the mosaic with no holes`, async ({ page }) => {
+        await page.goto(`/${album.slug}/`);
+        expect(mosaicCoverage(await mosaicTiles(page))).toEqual({ outside: [], overlapping: [], covered: true });
+      });
+    }
+
+    test("big tiles are square", async ({ page }) => {
+      await page.goto(`/${LANDSCAPES.slug}/`);
+      const big = (await mosaicTiles(page)).tiles.filter((tile) => tile.shape === "big");
+      expect(big.length).toBeGreaterThan(0);
+      expect(big.map((tile) => Math.abs(tile.width - tile.height) <= 1)).toEqual(big.map(() => true));
+    });
+  });
+}
+
+test.describe("album mosaic", () => {
+  test("tile photos fill their tile, cropped rather than stretched", async ({ page }) => {
+    await page.goto(`/${LANDSCAPES.slug}/`);
+    const fits = await page.locator(".tile img").evaluateAll((images: HTMLImageElement[]) =>
+      images.map((image) => {
+        const tile = image.closest<HTMLElement>(".tile")!;
+        return (
+          getComputedStyle(image).objectFit === "cover" &&
+          Math.abs(image.clientWidth - tile.clientWidth) <= 1 &&
+          Math.abs(image.clientHeight - tile.clientHeight) <= 1
+        );
+      }),
+    );
+    expect(fits).toEqual(fits.map(() => true));
+  });
+});
+
 test.describe("desktop", () => {
   test.skip(({ isMobile }) => isMobile, "desktop layout only");
-
-  test("tiles in one row share a top", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const rows = await justifiedRows(page);
-    const spreads = rows.map((row) => Math.max(...row.map((t) => t.top)) - Math.min(...row.map((t) => t.top)));
-    expect({ rows: rows.length > 2, worst: Math.max(...spreads) <= 1 }).toEqual({ rows: true, worst: true });
-  });
-
-  test("tiles in one row share a height", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const rows = await justifiedRows(page);
-    const spreads = rows.map((row) => Math.max(...row.map((t) => t.height)) - Math.min(...row.map((t) => t.height)));
-    expect(Math.max(...spreads)).toBeLessThanOrEqual(1);
-  });
-
-  test("every row but the last fills the mosaic width", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const content = await page.locator(".mosaic").evaluate((mosaic) => {
-      const style = getComputedStyle(mosaic);
-      const box = mosaic.getBoundingClientRect();
-      return { left: box.left + Number.parseFloat(style.paddingLeft), right: box.right - Number.parseFloat(style.paddingRight) };
-    });
-    const rows = (await justifiedRows(page)).slice(0, -1);
-    const worst = Math.max(
-      ...rows.map((row) => Math.max(Math.abs(row[0].left - content.left), Math.abs(content.right - row.at(-1)!.right))),
-    );
-    expect(worst).toBeLessThanOrEqual(2);
-  });
-
-  test("the last row is not stretched taller than the other rows", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const heights = (await justifiedRows(page)).map((row) => row[0].height);
-    const last = heights.at(-1)!;
-    expect(last).toBeLessThanOrEqual(Math.min(...heights.slice(0, -1)) + 1);
-  });
-
-  test("the last row keeps the base row height", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const last = (await justifiedRows(page)).at(-1)![0].height;
-    const rowHeight = (ROW_HEIGHT_VW * (await page.evaluate(() => window.innerWidth))) / 100;
-    expect(Math.abs(last - rowHeight), `last row ${last}px, base ${rowHeight}px`).toBeLessThanOrEqual(2);
-  });
-
-  test("tiles keep their photo's ratio", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const tiles = (await justifiedRows(page)).flat();
-    const worst = Math.max(...tiles.map((tile) => Math.abs(tile.width / tile.height - tile.ratio)));
-    expect(worst).toBeLessThan(0.02);
-  });
-
-  test("tile images are not cropped", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const images = page.locator(".tile img");
-    for (const image of await images.all()) {
-      await expectImageLoaded(image);
-    }
-    const worstDistortion = await images.evaluateAll((elements: HTMLImageElement[]) =>
-      Math.max(
-        ...elements.map((image) => {
-          const tile = image.closest(".tile")!.getBoundingClientRect();
-          return Math.abs(tile.width / tile.height - image.naturalWidth / image.naturalHeight);
-        }),
-      ),
-    );
-    expect(worstDistortion).toBeLessThan(0.02);
-  });
 
   test("hovering a tile zooms its image", async ({ page }) => {
     await page.goto(`/${LANDSCAPES.slug}/`);
@@ -1812,26 +1660,9 @@ test.describe("mobile", () => {
     expect(widths).toEqual(widths.map(() => full));
   });
 
-  test("album tiles keep their photo's ratio", async ({ page }) => {
+  test("album tiles are square", async ({ page }) => {
     await page.goto(`/${LANDSCAPES.slug}/`);
-    const tiles = (await justifiedRows(page)).flat();
-    const worst = Math.max(...tiles.map((tile) => Math.abs(tile.width / tile.height - tile.ratio)));
-    expect(worst).toBeLessThan(0.02);
-  });
-
-  test("album photos keep their natural aspect ratio", async ({ page }) => {
-    await page.goto(`/${LANDSCAPES.slug}/`);
-    const images = page.locator(".tile img");
-    for (const image of await images.all()) {
-      await expectImageLoaded(image);
-    }
-    const worstDistortion = await images.evaluateAll((elements: HTMLImageElement[]) =>
-      Math.max(
-        ...elements.map((image) =>
-          Math.abs(image.clientWidth / image.clientHeight - image.naturalWidth / image.naturalHeight),
-        ),
-      ),
-    );
-    expect(worstDistortion).toBeLessThan(0.02);
+    const { tiles } = await mosaicTiles(page);
+    expect(tiles.map((tile) => Math.abs(tile.width - tile.height) <= 1)).toEqual(tiles.map(() => true));
   });
 });

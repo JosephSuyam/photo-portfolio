@@ -1,0 +1,8 @@
+{% macro picture(cover, eager=false) %}
+<picture>
+  <source srcset="{{ cover.webp_srcset }}" sizes="{{ cover.sizes }}" type="image/webp">
+  <img src="{{ cover.src }}" srcset="{{ cover.jpeg_srcset }}" sizes="{{ cover.sizes }}"
+       width="{{ cover.width }}" height="{{ cover.height }}" alt=""
+       {% if not eager %}loading="lazy"{% endif %}>
+</picture>
+{% endmacro %}

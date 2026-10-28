@@ -1,16 +1,9 @@
-/* Portfolio: a white page (black in dark mode, by OS setting or the header toggle) with Bodoni
-   display headlines over Helvetica text. A centred title and spaced uppercase menu head every
-   page. The album index opens with a full-bleed feature of the first album above an
-   edge-to-edge grid of cover cards, titles set on the photos; album pages are justified rows
-   of uncropped photos with a lightbox; About and Contact are a centred text column. */
-
-@font-face {
-  font-family: "Bodoni Moda";
-  src: url("fonts/bodoni-moda-latin.woff2") format("woff2");
-  font-weight: 400 900;
-  font-style: normal;
-  font-display: swap;
-}
+/* Portfolio, "Cinematic": image first, heavy uppercase Helvetica titles set on full-bleed photos.
+   Photo pages are black in dark mode and white in light mode (by OS setting or the header
+   toggle); text on photos is always white over a dark gradient. The album index is a stack of
+   full-screen scenes, one per album, that snap into place under a fixed transparent header; album
+   pages open with a cover hero, then a gap-free mosaic of cropped photos with a lightbox and a
+   full-width banner to the next album; About and Contact are a centred text column. */
 
 :root {
   --bg: #ffffff;
@@ -18,15 +11,12 @@
   --muted: #8a8a8a;
   --line: #e6e6e6;
   --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --display: "Bodoni Moda", "Bodoni MT", Didot, Georgia, serif;
   --page-gutter: 24px;
-  --overlay: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.25) 60%, rgba(0, 0, 0, 0));
-  --overlay-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
-  /* Keep in sync with the FEATURE_*, GRID_* and CARD_* constants in build.py; the 28vw tile
-     basis in .tile matches ROW_HEIGHT_VW. */
-  --grid-columns: 12;
-  --card-gap: 4px;
-  --tile-gap: 8px;
+  /* Darkens the top (header, scene number) and bottom (titles) of a photo so white text reads. */
+  --overlay: linear-gradient(rgba(0, 0, 0, 0.4), transparent 20%, transparent 45%, rgba(0, 0, 0, 0.75));
+  --overlay-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+  --on-photo-muted: rgba(255, 255, 255, 0.9);
+  --gap: 4px;
   color-scheme: light;
 }
 
@@ -34,8 +24,8 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #000000;
-    --fg: #f2f2f2;
-    --muted: #8f8f8f;
+    --fg: #ffffff;
+    --muted: rgba(255, 255, 255, 0.65);
     --line: #222222;
     color-scheme: dark;
   }
@@ -43,8 +33,8 @@
 
 :root[data-theme="dark"] {
   --bg: #000000;
-  --fg: #f2f2f2;
-  --muted: #8f8f8f;
+  --fg: #ffffff;
+  --muted: rgba(255, 255, 255, 0.65);
   --line: #222222;
   color-scheme: dark;
 }
@@ -75,7 +65,7 @@ body {
   color: var(--fg);
   font-family: var(--sans);
   font-size: 15px;
-  line-height: 1.65;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -89,48 +79,70 @@ img { display: block; }
 a:focus-visible,
 button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Heavy uppercase display titles. */
+.page-heading,
+.scene-title,
+.album-heading,
+.pager-text > span {
+  margin: 0;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
 /* Small spaced capitals: menu, footer, counts, labels. */
-.site-nav a,
+.site-header,
 .site-footer,
-.page-meta,
-.album-heading + .album-count,
-.feature-label,
-.feature-count,
-.album-card .album-count,
+.scene-number,
+.scene-count,
+.album-count,
 .album-pager small,
+.pager-prev,
 .label {
-  font-size: 11px;
-  letter-spacing: 0.26em;
+  font-size: 12px;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
 }
 
+.scene-count,
+.album-count { font-size: 13px; letter-spacing: 0.2em; }
+
 /* Header and footer. */
 
-/* The side padding keeps a long title clear of the toggle in the top right corner. */
 .site-header {
-  position: relative;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  gap: 14px;
-  padding: 40px 72px 36px;
-  text-align: center;
+  gap: 12px 32px;
+  padding: 28px 40px;
 }
 
-/* Wraps only when the title is too long for the screen, never overflowing it. */
 .site-title {
-  max-width: 100%;
+  min-width: 0;
+  font-weight: 700;
   overflow-wrap: anywhere;
-  text-wrap: balance;
-  font: 700 40px/1.2 var(--display);
 }
 
 .site-nav {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   align-items: center;
-  gap: 8px 36px;
+  gap: 8px 32px;
 }
 
 .site-nav a { color: var(--muted); }
@@ -138,15 +150,12 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 .site-nav a:hover,
 .site-nav a[aria-current="page"] { color: var(--fg); }
 
-/* Positioned against the header, level with the first line of the title. */
 .theme-toggle {
-  position: absolute;
-  top: 46px;
-  right: 24px;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
+  margin: -8px -8px -8px 0;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -170,169 +179,208 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 :root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
 :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
+/* Over a photo the header is transparent and white in both themes. The album header scrolls
+   away with the hero, so it never sits over the page background. */
+.page-index:has(.scenes) .site-header,
+.page-album .site-header {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 3;
+  color: #fff;
+  text-shadow: var(--overlay-shadow);
+}
+
+.page-album .site-header { position: absolute; }
+
+.page-index:has(.scenes) .site-nav a,
+.page-album .site-nav a { color: var(--on-photo-muted); }
+
+.page-index:has(.scenes) .site-nav a:hover,
+.page-index:has(.scenes) .site-nav a[aria-current="page"],
+.page-album .site-nav a:hover,
+.page-index:has(.scenes) .theme-toggle,
+.page-album .theme-toggle { color: #fff; }
+
+.page-index:has(.scenes) .site-header :focus-visible,
+.page-album .site-header :focus-visible { outline-color: #fff; }
+
 .site-footer {
-  padding: 72px var(--page-gutter) 40px;
+  padding: 56px var(--page-gutter) 40px;
   text-align: center;
   color: var(--muted);
   overflow-wrap: anywhere;
+  scroll-snap-align: end;
 }
 
 .site-footer p { margin: 6px 0; }
 
-/* Page headings. */
+/* Text pages: page heading. */
 
-.page-heading,
-.album-heading {
-  margin: 0;
+.page-heading {
   padding: 24px var(--page-gutter) 0;
+  font-size: clamp(40px, 7vw, 96px);
   text-align: center;
-  overflow-wrap: anywhere;
 }
 
-.page-heading { font: 400 clamp(30px, 3vw, 44px)/1.15 var(--display); }
+/* Album index: one full-screen scene per album, snapping into place. */
 
-.album-heading { font: 400 clamp(32px, 4vw, 56px)/1.1 var(--display); }
+html:has(.scenes) { scroll-snap-type: y mandatory; }
 
-.page-meta,
-.album-heading + .album-count {
-  margin: 0;
-  padding: 10px var(--page-gutter) 40px;
-  text-align: center;
-  color: var(--muted);
-}
-
-.album-heading + .album-count { padding-bottom: 48px; }
-
-/* Album index: full-bleed feature of the first album, then an edge-to-edge grid of cards. */
-
-/* The section is the container for the card height below. */
-.albums { container-type: inline-size; }
-
-.feature {
+.scene {
   position: relative;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  scroll-snap-align: start;
+}
+
+.scene a {
   display: block;
-  color: #fff;
-}
-
-.feature-frame,
-.album-frame { overflow: hidden; }
-
-.feature-frame { aspect-ratio: 21 / 9; }
-
-.feature-frame img,
-.album-frame img {
-  width: 100%;
   height: 100%;
-  object-fit: cover;
-  transition: transform 0.6s ease;
-}
-
-.feature picture,
-.album-frame picture { display: block; height: 100%; }
-
-.feature-text {
-  position: absolute;
-  inset: auto 0 0 0;
-  padding: 120px 40px 40px;
-  background: var(--overlay);
+  color: #fff;
   text-shadow: var(--overlay-shadow);
 }
 
-.feature-label { display: block; }
-
-.feature-label[hidden] { visibility: hidden; display: block; }
-
-.feature-title {
-  margin: 6px 0 4px;
-  font: 700 clamp(36px, 5vw, 72px)/1.05 var(--display);
-  overflow-wrap: anywhere;
+.scene img,
+.album-hero img,
+.pager-next img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.feature-count { margin: 0; }
+.scene img { transition: transform 1.2s ease; }
 
-.album-grid {
+.scene a::after,
+.album-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--overlay);
+  pointer-events: none;
+}
+
+/* The photo covers the link's own outline, so the focus ring is drawn on the overlay. */
+.scene a:focus-visible { outline: none; }
+
+.scene a:focus-visible::after { outline: 2px solid #fff; outline-offset: -8px; }
+
+.scene-number {
+  position: absolute;
+  top: 84px;
+  right: 40px;
+  z-index: 1;
+  letter-spacing: 0.2em;
+  color: var(--on-photo-muted);
+}
+
+.scene-text {
+  position: absolute;
+  right: 40px;
+  bottom: 56px;
+  left: 40px;
+  z-index: 1;
+}
+
+.scene-title,
+.album-heading { font-size: 5vw; }
+
+.scene-count,
+.album-count {
+  margin: 14px 0 0;
+  color: var(--on-photo-muted);
+}
+
+@media (hover: hover) {
+  .scene a:hover img { transform: scale(1.03); }
+}
+
+/* Album page: cover hero, a mosaic of photos, then the next-album banner. */
+
+.album-hero {
+  position: relative;
+  height: 88vh;
+  height: 88svh;
+  overflow: hidden;
+  color: #fff;
+  text-shadow: var(--overlay-shadow);
+}
+
+.album-hero-link {
+  position: absolute;
+  inset: 0;
+  display: block;
+  cursor: zoom-in;
+}
+
+/* As for scenes, the photo covers the link's own outline, so the ring is drawn above it. */
+.album-hero-link:focus-visible { outline: none; }
+
+.album-hero-link:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  outline: 2px solid #fff;
+  outline-offset: -8px;
+}
+
+/* Only the title and count text block clicks (and can be selected); clicks on the rest of
+   the caption strip fall through to the cover link. */
+.album-hero-text {
+  position: absolute;
+  right: 40px;
+  bottom: 48px;
+  left: 40px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.album-hero-text > * {
+  width: fit-content;
+  pointer-events: auto;
+}
+
+/* Tile spans match MOSAIC_TILES in build.py (its widths and aspects follow from them); its
+   blocks of shapes close the grid with no holes. Every row is as tall as a column is wide, so
+   the spans alone size the tiles; the link is positioned out of flow so the photo's own size
+   never stretches a row. */
+.page-album main { container-type: inline-size; }
+
+.mosaic {
+  --columns: 4;
   display: grid;
-  grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
-  gap: var(--card-gap);
-  margin: var(--card-gap) 0 0;
+  grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+  grid-auto-rows: calc((100cqi - (var(--columns) - 1) * var(--gap)) / var(--columns));
+  grid-auto-flow: dense;
+  gap: var(--gap);
+  margin: var(--gap) 0 0;
   padding: 0;
   list-style: none;
 }
 
-.album-card { position: relative; }
-
-/* The frame fills the card; the title and count sit in its bottom rows, over a gradient
-   (::after) that reaches a little above them. */
-.album-card a {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto;
-  color: #fff;
-  text-shadow: var(--overlay-shadow);
-}
-
-.album-card a::after {
-  content: "";
-  grid-row: 2 / 4;
-  grid-column: 1;
-  margin-top: -80px;
-  background: var(--overlay);
-}
-
-.album-frame { grid-row: 1 / 4; grid-column: 1; }
-
-.album-title,
-.album-card .album-count {
-  grid-column: 1;
-  z-index: 1;
-  padding: 0 28px;
-}
-
-.album-title {
-  grid-row: 2;
-  margin: 0;
-  font: 700 28px/1.15 var(--display);
-  overflow-wrap: anywhere;
-}
-
-.album-card .album-count {
-  grid-row: 3;
-  margin: 4px 0 0;
-  padding-bottom: 24px;
-}
-
-/* Every frame is as tall as a 3:2 frame in a row of two, so a lone last card is 3:1. */
-.album-frame { height: calc((100cqi - var(--card-gap)) / 3); }
-.album-card--span-6 { grid-column: span 6; }
-.album-card--span-12 { grid-column: span 12; }
-
-@media (hover: hover) {
-  .album-card a:hover img { transform: scale(1.03); }
-}
-
-/* Album page: title and count, justified rows of photos, then the previous/next pager. */
-
-/* Each tile grows in proportion to its ratio, so every tile in a row has the same height;
-   the ::after spacer soaks up the free space of the last row so it keeps the base height. */
-.mosaic {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--tile-gap);
-  margin: 0;
-  padding: 0 var(--tile-gap);
-  list-style: none;
-}
-
-.mosaic::after { content: ""; flex: 999999 1 0; }
-
 .tile {
-  flex: calc(var(--ratio) * 1000) 1 calc(var(--ratio) * 28vw);
-  min-width: 0;
-  aspect-ratio: var(--ratio);
+  position: relative;
   overflow: hidden;
   animation: fade-in 600ms ease both;
 }
 
-.tile a,
+.tile--big { grid-column: span 2; grid-row: span 2; }
+
+.tile--wide { grid-column: span 2; }
+
+.tile--full { grid-column: 1 / -1; grid-row: span 2; }
+
+@media (max-width: 1024px) {
+  .mosaic { --columns: 2; }
+
+  .tile--full { grid-row: auto; }
+}
+
+.tile a { position: absolute; inset: 0; }
+
 .tile picture { display: block; width: 100%; height: 100%; }
 
 .tile img {
@@ -342,7 +390,16 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
   transition: transform 500ms ease;
 }
 
-.tile a:focus-visible { outline-offset: -2px; }
+/* The zoomed photo covers the link's own outline, so the focus ring is drawn on top of it. */
+.tile a:focus-visible { outline: none; }
+
+.tile a:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
 
 .tile a:focus-visible img { transform: scale(1.1); }
 
@@ -357,34 +414,70 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 }
 
 .album-pager {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 96px var(--page-gutter) 0;
-  border-top: 1px solid var(--line);
+  position: relative;
+  margin-top: var(--gap);
+  color: #fff;
+  text-shadow: var(--overlay-shadow);
+}
+
+.pager-next {
+  position: relative;
+  display: block;
+  height: 56vh;
+  overflow: hidden;
+}
+
+.pager-next img {
+  filter: brightness(0.45);
+  transition: filter 0.4s ease;
+}
+
+/* Taps on touch screens would leave the banner brightened. */
+@media (hover: hover) {
+  .pager-next:hover img { filter: brightness(0.65); }
+}
+
+.pager-text {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 40px;
   text-align: center;
 }
 
-.album-pager a { min-width: 0; padding: 32px 16px 0; }
-
-.album-pager a + a { border-left: 1px solid var(--line); }
-
-.album-pager small {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--muted);
+.pager-text small {
+  letter-spacing: 0.3em;
+  color: var(--on-photo-muted);
 }
 
-.album-pager span {
-  display: block;
-  font: 400 30px/1.2 var(--display);
+.pager-text > span { font-size: 6vw; }
+
+/* The photo covers the link's own outline, so the focus ring is drawn on the text layer. */
+.pager-next:focus-visible { outline: none; }
+
+.pager-next:focus-visible .pager-text { outline: 2px solid #fff; outline-offset: -8px; }
+
+.pager-prev {
+  position: absolute;
+  top: 24px;
+  left: 40px;
+  z-index: 2;
+  max-width: calc(100% - 80px);
   overflow-wrap: anywhere;
 }
 
-.album-pager a:hover span {
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 6px;
-}
+.pager-prev small { color: var(--on-photo-muted); }
+
+.pager-prev span { margin-left: 0.8em; }
+
+.pager-prev:hover small { color: #fff; }
+
+.pager-prev:focus-visible { outline-color: #fff; }
 
 /* About and Contact: a centred text column; Contact leads with the email address set large. */
 
@@ -405,7 +498,7 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 
 .lede {
   margin: 0 0 36px;
-  font: 400 30px/1.3 var(--display);
+  font: 400 30px/1.3 var(--sans);
   text-align: center;
   overflow-wrap: anywhere;
 }
@@ -429,7 +522,7 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
   margin: 40px auto 56px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--fg);
-  font: 400 clamp(28px, 4vw, 52px)/1.15 var(--display);
+  font: 400 clamp(28px, 4vw, 52px)/1.15 var(--sans);
   text-align: center;
   overflow-wrap: anywhere;
 }
@@ -468,7 +561,7 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 
 .section-heading {
   margin: 0 0 28px;
-  font: 400 30px/1.2 var(--display);
+  font: 400 30px/1.2 var(--sans);
   text-align: center;
 }
 
@@ -602,51 +695,41 @@ html:has(.lightbox[open]) { overflow: hidden; }
   :root.theme-transition { transition: none; }
   .tile { animation: none; }
   .tile img,
-  .feature-frame img,
-  .album-frame img,
+  .scene img,
+  .pager-next img,
   .lightbox-image { transition: none; }
   .tile a:hover img,
   .tile a:focus-visible img,
-  .album-card a:hover img { transform: none; }
+  .scene a:hover img { transform: none; }
+  html:has(.scenes) { scroll-snap-type: none; }
 }
 
-/* Phones: one column everywhere; album photos uncropped at their own ratio. */
+/* Phones: one column everywhere; album photos in square tiles. */
 
 @media (max-width: 767px) {
-  .site-header { gap: 12px; padding: 28px 52px 24px; }
+  .site-header { padding: 20px; }
 
-  .site-title { font-size: 30px; }
+  .site-nav { gap: 8px 20px; }
 
-  .site-nav { gap: 8px 22px; }
+  .scene-number { top: 64px; right: 20px; }
 
-  .theme-toggle { top: 28px; right: 8px; }
+  .scene-text,
+  .album-hero-text { right: 20px; bottom: 20px; left: 20px; }
 
-  .feature-frame { aspect-ratio: 4 / 5; }
+  .scene-title,
+  .album-heading { font-size: 9vw; }
 
-  .feature-text { padding: 80px 20px 20px; }
+  .mosaic { --columns: 1; }
 
-  .album-grid { grid-template-columns: minmax(0, 1fr); }
+  .mosaic .tile { grid-column: auto; grid-row: auto; }
 
-  .album-grid .album-card { grid-column: auto; }
+  .pager-next { height: 40vh; }
 
-  .album-grid .album-frame { height: auto; aspect-ratio: 3 / 2; }
+  .pager-text { padding: 0 20px; }
 
-  .album-title,
-  .album-card .album-count { padding-right: 20px; padding-left: 20px; }
+  .pager-text > span { font-size: 11vw; }
 
-  .album-card .album-count { padding-bottom: 20px; }
-
-  .mosaic { flex-direction: column; gap: 4px; padding: 0; }
-
-  .mosaic::after { display: none; }
-
-  .tile { flex: none; width: 100%; }
-
-  .album-pager { grid-template-columns: minmax(0, 1fr); margin-top: 56px; }
-
-  .album-pager a { padding-bottom: 32px; }
-
-  .album-pager a + a { border-top: 1px solid var(--line); border-left: 0; }
+  .pager-prev { left: 20px; max-width: calc(100% - 40px); }
 
   .lede { font-size: 23px; }
 

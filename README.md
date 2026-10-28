@@ -2,7 +2,7 @@
 
 A static photographer portfolio generated from a Google Drive folder. Each subfolder of the root folder becomes an album; each image inside it becomes a photo. Optional `about.json` and `contact.json` in the root add About and Contact pages (samples in [docs/examples/](docs/examples/)), and the optional `CONTACT_FORM_URL` setting adds a message form to the Contact page. See [Drive folder conventions](docs/drive-conventions.md) and [Setup](docs/setup.md#contact-form-optional).
 
-The look follows [reel.format.com](https://reel.format.com/): white or black themes, Bodoni headlines, a full-bleed feature of the latest album over a grid of cover cards, and album pages of uncropped photos in justified rows.
+The look is image-first: white or black themes, heavy uppercase Helvetica titles set on full-screen photos, an index of one full-screen scene per album, and album pages that open with the cover, then a gap-free mosaic of cropped photos that open whole in a lightbox.
 
 ## Quick start
 
@@ -42,7 +42,3 @@ The server listens on `localhost` only. It is for previewing, not for hosting.
 - [Setup](docs/setup.md)
 - [Drive folder conventions](docs/drive-conventions.md)
 - [Architecture](docs/architecture.md)
-
-## Credits
-
-Headlines use [Bodoni Moda](https://fonts.google.com/specimen/Bodoni+Moda), self-hosted in `src/portfolio/static/fonts/` and licensed under the SIL Open Font License 1.1 (see `src/portfolio/static/fonts/OFL.txt`).

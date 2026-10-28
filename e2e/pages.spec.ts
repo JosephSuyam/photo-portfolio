@@ -19,7 +19,7 @@ const FORM_URL = "https://forms.example.test/f/reel-e2e";
 const SITE_TITLE = "Reel E2E";
 const NAV_LINKS = ["Work", "About", "Contact"];
 const DARK_BACKGROUND = "rgb(0, 0, 0)";
-/** A title longer than the default that still fits one phone line at the 30px Bodoni size (~258 of 308px). */
+/** A title longer than the default that still fits one phone line. */
 const LONG_SITE_TITLE = "Reel E2E Fine Art";
 /** A title too long for one phone line; it must wrap on its own row instead of overflowing. */
 const VERY_LONG_SITE_TITLE = "Reel E2E Fine Art, Documentary and Editorial Photography Co.";

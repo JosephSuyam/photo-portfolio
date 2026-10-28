@@ -172,40 +172,6 @@ def test_build_site_copies_stylesheet(cache: Path, out: Path) -> None:
     assert (out / "static" / "site.css").read_bytes() == (STATIC_DIR / "site.css").read_bytes()
 
 
-@pytest.mark.parametrize("name", ["bodoni-moda-latin.woff2", "OFL.txt"])
-def test_build_site_copies_font_file(cache: Path, out: Path, name: str) -> None:
-    from portfolio.build import STATIC_DIR
-
-    _build(_three_albums(cache), cache, out)
-    copied = out / "static" / "fonts" / name
-    assert copied.read_bytes() == (STATIC_DIR / "fonts" / name).read_bytes()
-
-
-def _font_faces(out: Path) -> list[str]:
-    css = _read(out / "static" / "site.css")
-    return re.findall(r"@font-face\s*\{[^}]*\}", css)
-
-
-def test_build_site_stylesheet_declares_bodoni_moda_font_face(cache: Path, out: Path) -> None:
-    _build(_three_albums(cache), cache, out)
-    families = [re.search(r"font-family:\s*([^;]+);", face) for face in _font_faces(out)]
-    assert '"Bodoni Moda"' in [match.group(1).strip() for match in families if match]
-
-
-def test_build_site_bodoni_moda_font_url_relative_to_stylesheet(cache: Path, out: Path) -> None:
-    _build(_three_albums(cache), cache, out)
-    bodoni = [face for face in _font_faces(out) if "Bodoni Moda" in face]
-    # A relative URL resolves against site.css, so it keeps working under a base path.
-    urls = [url for face in bodoni for url in re.findall(r'url\("([^"]+)"\)', face)]
-    assert urls == ["fonts/bodoni-moda-latin.woff2"]
-
-
-def test_build_site_bodoni_moda_font_url_points_at_copied_file(cache: Path, out: Path) -> None:
-    _build(_three_albums(cache), cache, out)
-    urls = re.findall(r'url\("([^"]+\.woff2)"\)', "".join(_font_faces(out)))
-    assert [(out / "static" / url).is_file() for url in urls] == [True]
-
-
 def test_build_site_writes_derived_images(cache: Path, out: Path, tmp_path: Path) -> None:
     expected = _expected(write_original(cache, "p1"), tmp_path / "scratch")
     _build([make_album("a", [make_photo("p1")])], cache, out)
@@ -237,8 +203,7 @@ def test_build_site_index_shows_album_title(cache: Path, out: Path) -> None:
 def test_build_site_index_albums_in_manifest_order(cache: Path, out: Path) -> None:
     a, b, c = _three_albums(cache)
     _build([c, a, b], cache, out)
-    page = _page(out / "index.html")
-    links = page.find_all("a.feature") + page.find_all("ul.album-grid li.album-card a")
+    links = _page(out / "index.html").find_all("section.scenes article.scene a")
     assert [link.attrs.get("href") for link in links] == ["/c/", "/a/", "/b/"]
 
 
@@ -270,14 +235,16 @@ def test_build_site_cover_missing_uses_first_photo_thumbnail(
     assert f"/images/{expected.thumbnail.jpeg_name}" in _read(out / "index.html")
 
 
-def test_build_site_cover_not_in_photos_not_on_album_page(
+def test_build_site_cover_not_in_photos_not_among_mosaic_tiles(
     cache: Path, out: Path, tmp_path: Path
 ) -> None:
     write_original(cache, "p1", color=(255, 0, 0))
     expected = _expected(write_original(cache, "cov", color=(0, 0, 255)), tmp_path / "scratch")
     album = make_album("a", [make_photo("p1")], cover=make_photo("cov", "cover.jpg"))
     _build([album], cache, out)
-    assert expected.display.jpeg_name not in _read(out / "a" / "index.html")
+    html = _read(out / "a" / "index.html")
+    mosaic = html[html.index('<ul class="mosaic">') : html.index("</ul>")]
+    assert expected.display.jpeg_name not in mosaic
 
 
 # build_site: album pages
@@ -489,7 +456,7 @@ PAYLOAD_TITLE = '<script>alert("x")</script>'
 
 
 def _untrusted_albums(cache: Path) -> list[Album]:
-    """Three albums titled with a script payload, so it shows in feature, cards, and pager."""
+    """Three albums titled with a script payload, so it shows in scenes, heroes, and pager."""
     albums = _three_albums(cache)
     return [album.model_copy(update={"title": PAYLOAD_TITLE}) for album in albums]
 
@@ -500,16 +467,22 @@ def test_build_site_untrusted_title_escaped(cache: Path, out: Path, page: str) -
     assert "<script>" not in _read(out / page)
 
 
-def test_build_site_untrusted_title_escaped_in_feature(cache: Path, out: Path) -> None:
+def test_build_site_untrusted_title_escaped_in_scenes(cache: Path, out: Path) -> None:
     _build(_untrusted_albums(cache), cache, out)
-    page = _page(out / "index.html")
-    assert _one(page, "a.feature h2.feature-title").text() == PAYLOAD_TITLE
+    titles = _page(out / "index.html").find_all("article.scene h2.scene-title")
+    assert [title.text() for title in titles] == [PAYLOAD_TITLE] * 3
 
 
-def test_build_site_untrusted_title_escaped_in_cards(cache: Path, out: Path) -> None:
+def test_build_site_untrusted_title_escaped_in_album_hero(cache: Path, out: Path) -> None:
     _build(_untrusted_albums(cache), cache, out)
-    titles = _page(out / "index.html").find_all("li.album-card h2.album-title")
-    assert [title.text() for title in titles] == [PAYLOAD_TITLE, PAYLOAD_TITLE]
+    page = _page(out / "a" / "index.html")
+    assert _one(page, "section.album-hero h1.album-heading").text() == PAYLOAD_TITLE
+
+
+def test_build_site_untrusted_title_escaped_in_hero_link_label(cache: Path, out: Path) -> None:
+    _build(_untrusted_albums(cache), cache, out)
+    link = _one(_page(out / "a" / "index.html"), "a.album-hero-link")
+    assert link.attrs.get("aria-label") == f"Open cover photo of {PAYLOAD_TITLE}"
 
 
 @pytest.mark.parametrize("direction", ["prev", "next"])
@@ -715,64 +688,65 @@ def test_base_path_from_url_already_encoded_path_not_double_encoded() -> None:
     assert base_path_from_url("https://x.com/my%20portfolio/") == "/my%20portfolio/"
 
 
-# justified_sizes
+# mosaic_shapes
 
-
-def test_row_height_vw_is_twenty_eight() -> None:
-    from portfolio.build import ROW_HEIGHT_VW
-
-    assert ROW_HEIGHT_VW == 28
-
-
-def test_row_height_vw_matches_tile_basis_in_stylesheet() -> None:
-    from portfolio.build import ROW_HEIGHT_VW, STATIC_DIR
-
-    css = (STATIC_DIR / "site.css").read_text(encoding="utf-8")
-    basis = re.search(
-        r"flex:\s*calc\(var\(--ratio\) \* 1000\) 1 calc\(var\(--ratio\) \* ([^)]+)\)", css
-    )
-    assert basis is not None, "no justified tile flex rule in site.css"
-    value = basis.group(1).strip()
-    if variable := re.fullmatch(r"var\((--[\w-]+)\)", value):
-        declared = re.search(rf"{variable.group(1)}:\s*([^;]+);", css)
-        value = declared.group(1).strip() if declared else value
-    assert value == f"{ROW_HEIGHT_VW}vw"
+_BLOCK = ["big", "small", "small", "big", "small", "small"]
 
 
 @pytest.mark.parametrize(
-    ("width", "height", "desktop"),
+    ("count", "expected"),
     [
-        (3000, 2000, "84vw"),
-        (1000, 1000, "56vw"),
-        (2000, 864, "100vw"),
-        (1080, 1929, "32vw"),
+        (0, []),
+        (1, ["full"]),
+        (2, ["big", "big"]),
+        (3, ["big", "wide", "wide"]),
+        (4, ["big", "small", "small", "wide"]),
+        (5, ["big", "small", "small", "big", "wide"]),
+        (6, _BLOCK),
+        (7, [*_BLOCK, "full"]),
+        (8, [*_BLOCK, "big", "big"]),
+        (9, [*_BLOCK, "big", "wide", "wide"]),
+        (10, [*_BLOCK, "big", "small", "small", "wide"]),
+        (11, [*_BLOCK, "big", "small", "small", "big", "wide"]),
+        (12, [*_BLOCK, *_BLOCK]),
+        (13, [*_BLOCK, *_BLOCK, "full"]),
     ],
 )
-def test_justified_sizes_returns_twice_row_height_width(
-    width: int, height: int, desktop: str
+def test_mosaic_shapes_blocks_then_closed_remainder(count: int, expected: list[str]) -> None:
+    from portfolio.build import mosaic_shapes
+
+    assert mosaic_shapes(count) == expected
+
+
+def test_mosaic_shapes_negative_count_raises_value_error() -> None:
+    from portfolio.build import mosaic_shapes
+
+    with pytest.raises(ValueError, match="-1"):
+        mosaic_shapes(-1)
+
+
+# mosaic_sizes
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "shape", "expected"),
+    [
+        # A 3:2 photo overflows a square tile: 1.5x its 100 / 50 / 25vw box.
+        (3000, 2000, "small", "(max-width: 767px) 150vw, (max-width: 1024px) 75vw, 38vw"),
+        # A 2:1 photo fits a 2:1 tile exactly and overflows only the square phone tile.
+        (2000, 1000, "wide", "(max-width: 767px) 200vw, (max-width: 1024px) 100vw, 50vw"),
+        # A tall photo is cropped top and bottom, so it is never wider than its tile.
+        (1000, 2000, "big", "(max-width: 767px) 100vw, (max-width: 1024px) 100vw, 50vw"),
+    ],
+)
+def test_mosaic_sizes_returns_cropped_width_per_breakpoint(
+    width: int, height: int, shape: str, expected: str
 ) -> None:
-    from portfolio.build import justified_sizes
+    from portfolio.build import mosaic_sizes
     from portfolio.images import ImageVariant
 
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=width, height=height)
-    assert justified_sizes(variant) == f"(max-width: 767px) 100vw, {desktop}"
-
-
-def test_justified_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
-    from portfolio.build import justified_sizes
-    from portfolio.images import ImageVariant
-
-    # 56 * 116 / 112 is exactly 58, but (116 / 112) * 28 * 2 is 58.00000000000001 in floats.
-    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=116, height=112)
-    assert justified_sizes(variant) == "(max-width: 767px) 100vw, 58vw"
-
-
-def test_justified_sizes_very_wide_photo_capped_at_viewport_width() -> None:
-    from portfolio.build import justified_sizes
-    from portfolio.images import ImageVariant
-
-    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=6000, height=1000)
-    assert justified_sizes(variant) == "(max-width: 767px) 100vw, 100vw"
+    assert mosaic_sizes(variant, shape) == expected
 
 
 # build_site: album mosaic and lightbox
@@ -790,30 +764,16 @@ def _tiles(out: Path) -> list[Element]:
     return _page(out / "a" / "index.html").find_all("ul.mosaic li.tile")
 
 
-def test_build_site_album_tile_style_carries_photo_ratio(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", size=(1200, 800))
-    _build([make_album("a", [make_photo("p1")])], cache, out)
-    assert [tile.attrs.get("style") for tile in _tiles(out)] == ["--ratio: 1.5000"]
+def test_build_site_album_tiles_have_shape_class_in_photo_order(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 8)], cache, out)
+    shapes = ["big", "small", "small", "big", "small", "small", "big", "big"]
+    assert [tile.classes for tile in _tiles(out)] == [["tile", f"tile--{s}"] for s in shapes]
 
 
-def test_build_site_album_tile_ratio_rounded_to_four_decimals(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", size=(1000, 700))
-    _build([make_album("a", [make_photo("p1")])], cache, out)
-    assert [tile.attrs.get("style") for tile in _tiles(out)] == ["--ratio: 1.4286"]
-
-
-def test_build_site_album_tiles_keep_photo_order_ratios(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", size=(800, 1200), color=(255, 0, 0))
-    write_original(cache, "p2", size=(900, 900), color=(0, 255, 0))
-    write_original(cache, "p3", size=(1600, 400), color=(0, 0, 255))
-    _build([make_album("a", [make_photo(f"p{n}") for n in (1, 2, 3)])], cache, out)
-    styles = [tile.attrs.get("style") for tile in _tiles(out)]
-    assert styles == ["--ratio: 0.6667", "--ratio: 1.0000", "--ratio: 4.0000"]
-
-
-def test_build_site_album_tiles_have_no_shape_class(cache: Path, out: Path) -> None:
-    _build([_album_of(cache, 5)], cache, out)
-    assert [tile.classes for tile in _tiles(out)] == [["tile"]] * 5
+def test_build_site_album_tiles_all_lazy(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 3)], cache, out)
+    loading = [_one(tile, "img").attrs.get("loading") for tile in _tiles(out)]
+    assert loading == ["lazy"] * 3
 
 
 def test_build_site_album_tile_links_display_jpeg_with_base_path(
@@ -843,12 +803,12 @@ def test_build_site_album_tile_last_link_label_counts_all_photos(cache: Path, ou
     assert 'aria-label="Open photo 3 of 3"' in _read(out / "a" / "index.html")
 
 
-def test_build_site_album_tile_sizes_from_justified_row(cache: Path, out: Path) -> None:
+def test_build_site_album_tile_sizes_from_tile_shape(cache: Path, out: Path) -> None:
     write_original(cache, "p1", size=(1200, 800))
     _build([make_album("a", [make_photo("p1")])], cache, out)
     image = _one(_tiles(out)[0], "img")
-    # A 3:2 photo at twice the 28vw row height is 3/2 * 56 = 84vw wide.
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 84vw"
+    # A lone photo is a full tile: 2:1 on desktop and tablet, square on phones.
+    assert image.attrs.get("sizes") == "(max-width: 767px) 150vw, (max-width: 1024px) 100vw, 100vw"
 
 
 def test_build_site_album_tile_source_sizes_match_image(cache: Path, out: Path) -> None:
@@ -905,369 +865,303 @@ def test_build_site_without_scripts_album_page_has_no_lightbox(cache: Path, out:
     assert "<dialog" not in _read(out / "a" / "index.html")
 
 
-# album_card_spans
-
-_CARD_SPANS = {6, 12}
-_CARD_COLUMNS = 12
-
-
-def _rows(spans: list[int]) -> list[list[int]]:
-    """Spans grouped into rows as CSS grid auto-placement wraps them on 12 columns."""
-    rows: list[list[int]] = []
-    for span in spans:
-        if not rows or sum(rows[-1]) + span > _CARD_COLUMNS:
-            rows.append([])
-        rows[-1].append(span)
-    return rows
-
-
-@pytest.mark.parametrize(
-    ("count", "expected"),
-    [
-        (0, []),
-        (1, [12]),
-        (2, [6, 6]),
-        (3, [6, 6, 12]),
-        (4, [6, 6, 6, 6]),
-        (5, [6, 6, 6, 6, 12]),
-        (6, [6, 6, 6, 6, 6, 6]),
-    ],
-)
-def test_album_card_spans_count_returns_expected_spans(count: int, expected: list[int]) -> None:
-    from portfolio.build import album_card_spans
-
-    assert album_card_spans(count) == expected
-
-
-@pytest.mark.parametrize("count", range(21))
-def test_album_card_spans_returns_one_span_per_card(count: int) -> None:
-    from portfolio.build import album_card_spans
-
-    assert len(album_card_spans(count)) == count
-
-
-@pytest.mark.parametrize("count", range(21))
-def test_album_card_spans_every_row_fills_twelve_columns(count: int) -> None:
-    from portfolio.build import album_card_spans
-
-    row_widths = [sum(row) for row in _rows(album_card_spans(count))]
-    assert all(width == _CARD_COLUMNS for width in row_widths)
-
-
-@pytest.mark.parametrize("count", range(21))
-def test_album_card_spans_uses_only_allowed_spans(count: int) -> None:
-    from portfolio.build import album_card_spans
-
-    assert set(album_card_spans(count)) <= _CARD_SPANS
-
-
-@pytest.mark.parametrize("count", range(21))
-def test_album_card_spans_only_last_card_may_span_full_row(count: int) -> None:
-    from portfolio.build import album_card_spans
-
-    assert _CARD_COLUMNS not in album_card_spans(count)[:-1]
-
-
-def test_album_card_spans_negative_count_raises_value_error() -> None:
-    from portfolio.build import album_card_spans
-
-    with pytest.raises(ValueError):
-        album_card_spans(-1)
-
-
-# index layout constants and card_aspect
-
-
-@pytest.mark.parametrize(
-    ("name", "expected"),
-    [("FEATURE_WIDTH_VW", 100), ("FEATURE_ASPECT", Fraction(21, 9)), ("CARDS_PER_ROW", 2)],
-)
-def test_index_layout_constant_matches_design(name: str, expected: object) -> None:
-    import portfolio.build
-
-    assert getattr(portfolio.build, name) == expected
-
-
-@pytest.mark.parametrize(("span", "expected"), [(6, Fraction(3, 2)), (12, Fraction(3, 1))])
-def test_card_aspect_span_returns_frame_ratio(span: int, expected: Fraction) -> None:
-    from portfolio.build import card_aspect
-
-    assert card_aspect(span) == expected
-
-
-def test_card_aspect_full_row_frame_as_tall_as_half_row_frame() -> None:
-    from portfolio.build import card_aspect
-
-    # Frame height is proportional to span / aspect; both spans must give the same height.
-    assert Fraction(12) / card_aspect(12) == Fraction(6) / card_aspect(6)
-
-
 # cover_sizes
 
 
 @pytest.mark.parametrize(
-    ("width", "height", "width_vw", "box_aspect", "desktop"),
+    ("width", "height", "phone", "desktop"),
     [
-        (1000, 2000, 66, Fraction(16, 9), "66vw"),
-        (1600, 900, 66, Fraction(16, 9), "66vw"),
-        (3000, 1000, 66, Fraction(16, 9), "112vw"),
-        (1000, 1000, 25, Fraction(4, 5), "32vw"),
-        (1000, 1000, 100, Fraction(16, 5), "100vw"),
-        (1600, 400, 100, Fraction(16, 5), "125vw"),
+        (1000, 2000, 100, 100),
+        (1080, 1929, 100, 100),
+        (900, 1600, 100, 100),
+        (1600, 900, 317, 100),
+        (3000, 2000, 267, 100),
+        (3000, 1000, 534, 169),
     ],
 )
-def test_cover_sizes_returns_cover_crop_width(
-    width: int, height: int, width_vw: int, box_aspect: Fraction, desktop: str
+def test_cover_sizes_returns_cover_crop_width_per_box(
+    width: int, height: int, phone: int, desktop: int
 ) -> None:
     from portfolio.build import cover_sizes
     from portfolio.images import ImageVariant
 
     variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=width, height=height)
-    assert cover_sizes(variant, width_vw, box_aspect) == f"(max-width: 767px) 100vw, {desktop}"
+    assert cover_sizes(variant) == f"(max-width: 767px) {phone}vw, {desktop}vw"
 
 
 def test_cover_sizes_exact_multiple_not_rounded_up_by_float_error() -> None:
     from portfolio.build import cover_sizes
     from portfolio.images import ImageVariant
 
-    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=1120, height=1000)
-    assert cover_sizes(variant, 25, Fraction(1)) == "(max-width: 767px) 100vw, 28vw"
+    # 1792/900 is exactly 1.12 x 16/9; float division gives 112.00000000000001.
+    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=1792, height=900)
+    assert cover_sizes(variant) == "(max-width: 767px) 354vw, 112vw"
 
 
-# build_site: index heading and counts
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("SCENE_ASPECT", Fraction(16, 9)), ("PHONE_SCENE_ASPECT", Fraction(9, 16))],
+)
+def test_scene_aspect_constant_matches_design(name: str, expected: Fraction) -> None:
+    import portfolio.build
+
+    assert getattr(portfolio.build, name) == expected
+
+
+# build_site: index scenes
+
+
+def _scenes(out: Path) -> list[Element]:
+    return _page(out / "index.html").find_all("section.scenes article.scene")
 
 
 def test_build_site_index_heading_is_work(cache: Path, out: Path) -> None:
     _build(_three_albums(cache), cache, out)
-    assert _one(_page(out / "index.html"), "h1.page-heading").text() == "Work"
+    assert _one(_page(out / "index.html"), "h1.visually-hidden").text() == "Work"
 
 
-@pytest.mark.parametrize(
-    ("album_count", "photos_each", "expected"),
-    [
-        (3, 2, "3 albums · 6 photographs"),
-        (1, 1, "1 album · 1 photograph"),
-        (1, 2, "1 album · 2 photographs"),
-        (2, 1, "2 albums · 2 photographs"),
-    ],
-)
-def test_build_site_index_meta_counts_albums_and_photos(
-    cache: Path, out: Path, album_count: int, photos_each: int, expected: str
-) -> None:
-    _build(_albums(cache, album_count, photos_each), cache, out)
-    assert _one(_page(out / "index.html"), "p.page-meta").text() == expected
+def test_build_site_index_scene_titles_follow_album_order(cache: Path, out: Path) -> None:
+    _build(_albums(cache, 4), cache, out)
+    titles = [_one(scene, "h2.scene-title").text() for scene in _scenes(out)]
+    assert titles == ["Album A", "Album B", "Album C", "Album D"]
 
 
-def test_build_site_index_meta_no_albums_uses_plurals(cache: Path, out: Path) -> None:
-    _build([], cache, out)
-    assert _one(_page(out / "index.html"), "p.page-meta").text() == "0 albums · 0 photographs"
+def test_build_site_index_scenes_link_their_albums(cache: Path, out: Path) -> None:
+    _build(_albums(cache, 4), cache, out)
+    hrefs = [_one(scene, "a").attrs.get("href") for scene in _scenes(out)]
+    assert hrefs == ["/a/", "/b/", "/c/", "/d/"]
 
 
-def test_build_site_index_meta_does_not_count_cover_file(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", color=(255, 0, 0))
-    write_original(cache, "cov", color=(0, 0, 255))
-    album = make_album("a", [make_photo("p1")], cover=make_photo("cov", "cover.jpg"))
-    _build([album], cache, out)
-    assert _one(_page(out / "index.html"), "p.page-meta").text() == "1 album · 1 photograph"
-
-
-def test_build_site_index_meta_skips_unpublished_albums(cache: Path, out: Path) -> None:
-    _build([*_albums(cache, 2), make_album("empty", [])], cache, out)
-    assert _one(_page(out / "index.html"), "p.page-meta").text() == "2 albums · 2 photographs"
-
-
-def test_build_site_index_meta_does_not_count_unreadable_photos(cache: Path, out: Path) -> None:
-    write_original(cache, "good")
-    write_corrupt_original(cache, "bad")
-    _build([make_album("a", [make_photo("bad"), make_photo("good")])], cache, out)
-    assert _one(_page(out / "index.html"), "p.page-meta").text() == "1 album · 1 photograph"
-
-
-# build_site: index feature card
-
-
-def test_build_site_index_feature_links_first_album(cache: Path, out: Path) -> None:
+def test_build_site_index_scene_title_in_text_block(cache: Path, out: Path) -> None:
     _build(_three_albums(cache), cache, out)
     page = _page(out / "index.html")
-    assert _one(page, "section.albums a.feature").attrs.get("href") == "/a/"
+    assert len(page.find_all("article.scene a div.scene-text h2.scene-title")) == 3
 
 
-def test_build_site_index_albums_section_has_preview_hook(cache: Path, out: Path) -> None:
+def test_build_site_index_scene_has_one_picture(cache: Path, out: Path) -> None:
     _build(_three_albums(cache), cache, out)
-    assert "data-album-preview" in _one(_page(out / "index.html"), "section.albums").attrs
-
-
-def test_build_site_index_feature_label_is_latest_album(cache: Path, out: Path) -> None:
-    _build(_three_albums(cache), cache, out)
-    page = _page(out / "index.html")
-    assert _one(page, "a.feature span.feature-label").text() == "Latest album"
-
-
-def test_build_site_index_feature_title_is_first_album(cache: Path, out: Path) -> None:
-    _build(_albums(cache, 3), cache, out)
-    page = _page(out / "index.html")
-    assert _one(page, "a.feature h2.feature-title").text() == "Album A"
+    counts = [len(scene.find_all("a picture img")) for scene in _scenes(out)]
+    assert counts == [1, 1, 1]
 
 
 @pytest.mark.parametrize(("photos_each", "expected"), [(3, "3 photos"), (1, "1 photo")])
-def test_build_site_index_feature_count_pluralised(
+def test_build_site_index_scene_count_pluralised(
     cache: Path, out: Path, photos_each: int, expected: str
 ) -> None:
     _build(_albums(cache, 2, photos_each), cache, out)
-    page = _page(out / "index.html")
-    assert _one(page, "a.feature p.feature-count").text() == expected
-
-
-def test_build_site_index_feature_has_picture_in_frame(cache: Path, out: Path) -> None:
-    _build(_three_albums(cache), cache, out)
-    page = _page(out / "index.html")
-    assert len(page.find_all("a.feature div.feature-frame picture img")) == 1
-
-
-def test_build_site_index_feature_title_in_text_block(cache: Path, out: Path) -> None:
-    _build(_three_albums(cache), cache, out)
-    page = _page(out / "index.html")
-    assert len(page.find_all("a.feature div.feature-text h2.feature-title")) == 1
-
-
-def test_build_site_index_feature_sizes_from_wide_box(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", size=(1200, 400))
-    _build([make_album("a", [make_photo("p1")])], cache, out)
-    image = _one(_page(out / "index.html"), "a.feature img")
-    # A 3:1 cover in a 100vw-wide 21:9 frame is cropped to 100 * 9/7 = 128.6vw.
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 129vw"
-
-
-def test_build_site_index_feature_narrower_cover_not_cropped_wider(cache: Path, out: Path) -> None:
-    write_original(cache, "p1", size=(1200, 800))
-    _build([make_album("a", [make_photo("p1")])], cache, out)
-    image = _one(_page(out / "index.html"), "a.feature img")
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 100vw"
-
-
-def test_build_site_single_album_index_has_feature(cache: Path, out: Path) -> None:
-    _build(_albums(cache, 1), cache, out)
-    assert len(_page(out / "index.html").find_all("a.feature")) == 1
-
-
-def test_build_site_single_album_index_has_no_grid(cache: Path, out: Path) -> None:
-    _build(_albums(cache, 1), cache, out)
-    assert _page(out / "index.html").find_all("ul.album-grid") == []
-
-
-@pytest.mark.parametrize("selector", ["a.feature", "ul.album-grid"])
-def test_build_site_no_albums_index_has_no_feature_or_grid(
-    cache: Path, out: Path, selector: str
-) -> None:
-    _build([], cache, out)
-    assert _page(out / "index.html").find_all(selector) == []
-
-
-# build_site: index album grid
-
-
-def _cards(out: Path) -> list[Element]:
-    return _page(out / "index.html").find_all("section.albums ul.album-grid li.album-card")
-
-
-def test_build_site_index_grid_lists_other_albums_in_order(cache: Path, out: Path) -> None:
-    _build(_albums(cache, 4), cache, out)
-    titles = [_one(card, "h2.album-title").text() for card in _cards(out)]
-    assert titles == ["Album B", "Album C", "Album D"]
-
-
-def test_build_site_index_grid_links_other_albums(cache: Path, out: Path) -> None:
-    _build(_albums(cache, 4), cache, out)
-    hrefs = [_one(card, "a").attrs.get("href") for card in _cards(out)]
-    assert hrefs == ["/b/", "/c/", "/d/"]
-
-
-def test_build_site_index_grid_card_has_picture_in_frame(cache: Path, out: Path) -> None:
-    _build(_albums(cache, 2), cache, out)
-    (card,) = _cards(out)
-    assert len(card.find_all("a div.album-frame picture img")) == 1
-
-
-@pytest.mark.parametrize(("photos_each", "expected"), [(2, "2 photos"), (1, "1 photo")])
-def test_build_site_index_grid_card_count_pluralised(
-    cache: Path, out: Path, photos_each: int, expected: str
-) -> None:
-    _build(_albums(cache, 2, photos_each), cache, out)
-    (card,) = _cards(out)
-    assert _one(card, "p.album-count").text() == expected
-
-
-def _card_spans(out: Path) -> list[int]:
-    spans: list[int] = []
-    for card in _cards(out):
-        found = [re.fullmatch(r"album-card--span-(\d+)", name) for name in card.classes]
-        spans.extend(int(match.group(1)) for match in found if match)
-    return spans
+    counts = [_one(scene, "p.scene-count").text() for scene in _scenes(out)]
+    assert counts == [f"{expected} — View album →"] * 2
 
 
 @pytest.mark.parametrize(
     ("album_count", "expected"),
-    [(2, [12]), (3, [6, 6]), (4, [6, 6, 12]), (6, [6, 6, 6, 6, 12])],
+    [(1, ["01 / 01"]), (3, ["01 / 03", "02 / 03", "03 / 03"])],
 )
-def test_build_site_index_grid_cards_have_span_classes(
-    cache: Path, out: Path, album_count: int, expected: list[int]
+def test_build_site_index_scene_numbers_count_scenes(
+    cache: Path, out: Path, album_count: int, expected: list[str]
 ) -> None:
     _build(_albums(cache, album_count), cache, out)
-    assert _card_spans(out) == expected
+    assert [_one(scene, "span.scene-number").text() for scene in _scenes(out)] == expected
 
 
-def test_build_site_index_card_sizes_from_span_box(cache: Path, out: Path) -> None:
-    write_original(cache, "a-p1")
-    write_original(cache, "b-p1", size=(1200, 400))
-    write_original(cache, "c-p1", color=(0, 0, 255))
-    albums = [make_album(slug, [make_photo(f"{slug}-p1")]) for slug in ("a", "b", "c")]
+def test_build_site_index_scene_numbers_past_nine_keep_two_digits(cache: Path, out: Path) -> None:
+    _build(_albums(cache, 10), cache, out)
+    numbers = [_one(scene, "span.scene-number").text() for scene in _scenes(out)]
+    assert numbers[-2:] == ["09 / 10", "10 / 10"]
+
+
+def test_build_site_index_scene_numbers_hidden_from_screen_readers(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    hidden = [_one(scene, "span.scene-number").attrs.get("aria-hidden") for scene in _scenes(out)]
+    assert hidden == ["true"] * 3
+
+
+def test_build_site_index_only_first_scene_cover_eager(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    loading = [_one(scene, "img").attrs.get("loading") for scene in _scenes(out)]
+    assert loading == [None, "lazy", "lazy"]
+
+
+def test_build_site_index_scene_sizes_from_wide_cover(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1200, 400))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    image = _one(_page(out / "index.html"), "article.scene img")
+    # A 3:1 cover is cropped to 168.75vw in a 16:9 scene and 533.3vw in a 9:16 phone scene.
+    assert image.attrs.get("sizes") == "(max-width: 767px) 534vw, 169vw"
+
+
+def test_build_site_index_scene_narrower_cover_not_cropped_wider(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1200, 800))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    image = _one(_page(out / "index.html"), "article.scene img")
+    assert image.attrs.get("sizes") == "(max-width: 767px) 267vw, 100vw"
+
+
+def test_build_site_index_scene_sizes_follow_each_cover_aspect(cache: Path, out: Path) -> None:
+    write_original(cache, "a-p1", size=(1200, 800))
+    write_original(cache, "b-p1", size=(1200, 400), color=(0, 0, 255))
+    albums = [make_album(slug, [make_photo(f"{slug}-p1")]) for slug in ("a", "b")]
     _build(albums, cache, out)
-    image = _one(_cards(out)[0], "img")
-    # Span 6 is a 50vw frame of aspect 3/2; a 3:1 cover is cropped to 50 * 2 = 100vw.
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 100vw"
+    sizes = [_one(scene, "img").attrs.get("sizes") for scene in _scenes(out)]
+    assert sizes == ["(max-width: 767px) 267vw, 100vw", "(max-width: 767px) 534vw, 169vw"]
 
 
-def test_build_site_index_card_sizes_round_fractional_width_up(cache: Path, out: Path) -> None:
-    write_original(cache, "a-p1")
-    write_original(cache, "b-p1", size=(160, 90))
-    write_original(cache, "c-p1", color=(0, 0, 255))
-    albums = [make_album(slug, [make_photo(f"{slug}-p1")]) for slug in ("a", "b", "c")]
+def test_build_site_index_scene_sizes_round_fractional_width_up(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(400, 200))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    image = _one(_page(out / "index.html"), "article.scene img")
+    # A 2:1 cover is cropped to 112.5vw in a 16:9 scene and 355.6vw in a 9:16 phone scene.
+    assert image.attrs.get("sizes") == "(max-width: 767px) 356vw, 113vw"
+
+
+def test_build_site_index_scene_source_sizes_match_image(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1200, 400))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    scene = _one(_page(out / "index.html"), "article.scene")
+    assert _one(scene, "source").attrs.get("sizes") == _one(scene, "img").attrs.get("sizes")
+
+
+def test_build_site_single_album_index_has_one_scene(cache: Path, out: Path) -> None:
+    _build(_albums(cache, 1), cache, out)
+    assert len(_scenes(out)) == 1
+
+
+def test_build_site_no_albums_index_has_no_scenes_section(cache: Path, out: Path) -> None:
+    _build([], cache, out)
+    assert _page(out / "index.html").find_all("section.scenes") == []
+
+
+# build_site: album hero
+
+
+def _hero(out: Path) -> Element:
+    return _one(_page(out / "a" / "index.html"), "section.album-hero")
+
+
+def test_build_site_album_hero_comes_before_mosaic(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 2)], cache, out)
+    html = _read(out / "a" / "index.html")
+    assert html.index('<section class="album-hero">') < html.index('<ul class="mosaic">')
+
+
+def test_build_site_album_hero_holds_heading_and_count(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 2)], cache, out)
+    hero = _hero(out)
+    texts = [_one(hero, selector).text() for selector in ("h1.album-heading", "p.album-count")]
+    assert texts == ["Book One", "2 photos"]
+
+
+def test_build_site_album_hero_shows_cover_file(cache: Path, out: Path, tmp_path: Path) -> None:
+    write_original(cache, "p1", color=(255, 0, 0))
+    cover = write_original(cache, "cov", color=(0, 0, 255), size=(1200, 800))
+    expected = _expected(cover, tmp_path / "scratch")
+    album = make_album("a", [make_photo("p1")], cover=make_photo("cov", "cover.jpg"))
+    _build([album], cache, out)
+    srcset = _one(_hero(out), "img").attrs.get("srcset") or ""
+    assert f"/images/{expected.display.jpeg_name} 1200w" in srcset
+
+
+def test_build_site_album_hero_cover_eager(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 2)], cache, out)
+    assert "loading" not in _one(_hero(out), "img").attrs
+
+
+def test_build_site_album_hero_sizes_follow_cover_aspect(cache: Path, out: Path) -> None:
+    write_original(cache, "p1", size=(1200, 400))
+    _build([make_album("a", [make_photo("p1")])], cache, out)
+    assert _one(_hero(out), "img").attrs.get("sizes") == "(max-width: 767px) 534vw, 169vw"
+
+
+def _album_with_cover_file(cache: Path, count: int) -> Album:
+    album = _album_of(cache, count)
+    write_original(cache, "cov", color=(0, 0, 255), size=(1200, 800))
+    return album.model_copy(update={"cover": make_photo("cov", "cover.jpg")})
+
+
+def _tile_labels(out: Path) -> list[str | None]:
+    return [_one(tile, "a").attrs.get("aria-label") for tile in _tiles(out)]
+
+
+def test_build_site_album_hero_link_opens_cover_file_display_jpeg_with_base_path(
+    cache: Path, out: Path, tmp_path: Path
+) -> None:
+    album = _album_with_cover_file(cache, 2)
+    expected = _expected(cache / "originals" / "cov", tmp_path / "scratch")
+    _build([album], cache, out, base_path="/portfolio/")
+    link = _one(_hero(out), "a.album-hero-link")
+    assert link.attrs.get("href") == f"/portfolio/images/{expected.display.jpeg_name}"
+
+
+def test_build_site_album_hero_link_is_labelled_lightbox_link(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 2)], cache, out)
+    attrs = _one(_hero(out), "a.album-hero-link").attrs
+    assert (attrs.get("aria-label"), "data-lightbox" in attrs) == (
+        "Open cover photo of Book One",
+        True,
+    )
+
+
+def test_build_site_album_hero_link_wraps_cover_picture(cache: Path, out: Path) -> None:
+    _build([_album_of(cache, 2)], cache, out)
+    assert len(_one(_hero(out), "a.album-hero-link").find_all("picture img")) == 1
+
+
+def test_build_site_album_hero_link_without_cover_file_is_first_tile_link(
+    cache: Path, out: Path
+) -> None:
+    _build([_album_of(cache, 2)], cache, out)
+    first_tile_href = _one(_tiles(out)[0], "a").attrs.get("href")
+    assert _one(_hero(out), "a.album-hero-link").attrs.get("href") == first_tile_href
+
+
+def test_build_site_album_tile_labels_with_cover_file_count_cover_first(
+    cache: Path, out: Path
+) -> None:
+    _build([_album_with_cover_file(cache, 3)], cache, out)
+    assert _tile_labels(out) == ["Open photo 2 of 4", "Open photo 3 of 4", "Open photo 4 of 4"]
+
+
+def test_build_site_album_tile_labels_without_cover_file_count_photos(
+    cache: Path, out: Path
+) -> None:
+    _build([_album_of(cache, 3)], cache, out)
+    assert _tile_labels(out) == ["Open photo 1 of 3", "Open photo 2 of 3", "Open photo 3 of 3"]
+
+
+def test_build_site_album_tile_labels_cover_file_identical_to_first_photo_count_photos(
+    cache: Path, out: Path
+) -> None:
+    album = _album_of(cache, 2)
+    # Same pixels as p0, so the cover shares the first photo's content-hashed file.
+    write_original(cache, "cov", color=(0, 80, 160))
+    _build([album.model_copy(update={"cover": make_photo("cov", "cover.jpg")})], cache, out)
+    assert _tile_labels(out) == ["Open photo 1 of 2", "Open photo 2 of 2"]
+
+
+# build_site: next-album banner
+
+
+def test_build_site_pager_next_shows_next_album_cover(
+    cache: Path, out: Path, tmp_path: Path
+) -> None:
+    write_original(cache, "a-p1", color=(255, 0, 0))
+    cover = write_original(cache, "b-p1", color=(0, 255, 0), size=(1200, 800))
+    expected = _expected(cover, tmp_path / "scratch")
+    albums = [make_album(slug, [make_photo(f"{slug}-p1")]) for slug in ("a", "b")]
     _build(albums, cache, out)
-    image = _one(_cards(out)[0], "img")
-    # A 16:9 cover in a 50vw 3:2 frame is cropped to 50 * 32/27 = 59.3vw.
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 60vw"
+    image = _one(_page(out / "a" / "index.html"), "a.pager-next picture img")
+    assert f"/images/{expected.display.jpeg_name} 1200w" in (image.attrs.get("srcset") or "")
 
 
-def test_build_site_index_lone_last_card_sizes_from_full_row_box(cache: Path, out: Path) -> None:
-    albums = []
-    for index, slug in enumerate("abcd"):
-        size = (800, 200) if slug == "d" else (40, 30)
-        write_original(cache, f"{slug}-p1", color=(index * 60, 0, 0), size=size)
-        albums.append(make_album(slug, [make_photo(f"{slug}-p1")]))
-    _build(albums, cache, out)
-    image = _one(_cards(out)[-1], "img")
-    # The lone last card is a 100vw 3:1 frame; a 4:1 cover is cropped to 100 * 4/3 = 133.3vw.
-    assert image.attrs.get("sizes") == "(max-width: 767px) 100vw, 134vw"
+def test_build_site_pager_next_cover_lazy(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    image = _one(_page(out / "a" / "index.html"), "a.pager-next img")
+    assert image.attrs.get("loading") == "lazy"
 
 
-_SIZES_PATTERN = re.compile(r"\(max-width: 767px\) 100vw, \d+vw")
-
-
-def test_build_site_index_card_links_carry_feature_sizes(cache: Path, out: Path) -> None:
-    _build(_albums(cache, 4), cache, out)
-    values = [_one(card, "a").attrs.get("data-feature-sizes") or "" for card in _cards(out)]
-    assert [bool(_SIZES_PATTERN.fullmatch(value)) for value in values] == [True, True, True]
-
-
-def test_build_site_index_card_feature_sizes_follow_cover_aspect(cache: Path, out: Path) -> None:
-    write_original(cache, "a-p1")
-    write_original(cache, "b-p1", size=(1200, 400))
-    write_original(cache, "c-p1", size=(1200, 800), color=(0, 0, 255))
-    albums = [make_album(slug, [make_photo(f"{slug}-p1")]) for slug in ("a", "b", "c")]
-    _build(albums, cache, out)
-    values = [_one(card, "a").attrs.get("data-feature-sizes") for card in _cards(out)]
-    # In the 100vw 21:9 feature frame a 3:1 cover is cropped to 129vw; a 3:2 cover fits at 100vw.
-    assert values == ["(max-width: 767px) 100vw, 129vw", "(max-width: 767px) 100vw, 100vw"]
+def test_build_site_pager_prev_has_no_cover(cache: Path, out: Path) -> None:
+    _build(_three_albums(cache), cache, out)
+    assert _page(out / "a" / "index.html").find_all("a.pager-prev img") == []
 
 
 # build_site: header and footer
