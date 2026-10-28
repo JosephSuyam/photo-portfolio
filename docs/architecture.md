@@ -8,6 +8,7 @@ Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--
 - **build** (`build.py`, `images.py`, `pages.py`, `scripts.py`): compiles `src/portfolio/ts/` with the project's local `tsc` into a temporary folder, makes content-hashed thumbnails and display images (WebP + JPEG), then renders Jinja2 templates into `dist/`. Scripts:
   - `theme.ts`: light/dark toggle in the header
   - `lightbox.ts`: album photo viewer
+  - `protect.ts`: download deterrents (see [Photo protection](#photo-protection))
 - **serve**: `dist/` is plain static files. `portfolio serve` previews them on localhost.
 
 ## Sync
@@ -30,7 +31,7 @@ dist/
   about/index.html              About page (only with a usable about.json)
   contact/index.html            Contact page (only with a usable contact.json)
   images/<hash>.webp|.jpg       thumbnails (600px wide) and display images (2000px long edge)
-  static/                       site.css, compiled JavaScript (theme.js, lightbox.js)
+  static/                       site.css, compiled JavaScript (theme.js, lightbox.js, protect.js)
   api/drive-webhook.mjs         Vercel function for instant redeploys (see setup.md)
   .portfolio-build                   marker: this directory was written by `portfolio build`
 ```
@@ -66,13 +67,13 @@ Both pages are a centered column (max 640px).
 ## Album index
 
 - One full-screen scene per album, in manifest (Drive) order, under a visually hidden "Work" heading. With no albums there are no scenes.
-- Each scene is a link to its album: the cover cropped to fill the screen, "01 / 03" (album number / total) top right, and bottom left the title (heavy uppercase, 5vw; 9vw on phones) over "N photos — View album →".
+- Each scene is a link to its album: the cover cropped to fill the screen, "01 / 03" (album number / total) top right, and bottom left the title (heavy uppercase, 5vw; 9vw on phones) over "N photos — View album →". N counts a separate `cover.*` file too; a cover with the same content as a photo (same content-hashed file) counts once. The album page count follows the same rule.
 - Scrolling snaps scene by scene; the footer snaps too, so it stays reachable. With a mouse or pen, hovering a scene zooms its cover to 1.03 over 1.2 s. With `prefers-reduced-motion: reduce`, neither.
 - **`sizes`**: `cover_sizes(variant)` gives the `sizes` value for every full-width cover (scenes, the album cover, the next-album banner). It assumes a 16:9 box (`SCENE_ASPECT`), 9:16 on phones (`PHONE_SCENE_ASPECT`); a photo wider than the box is cropped at the sides, so it is requested wider than 100vw.
 
 ## Album page
 
-- **Cover**: the album cover fills 88% of the screen height, with the title (heavy uppercase, 5vw; 9vw on phones) and photo count bottom left. The cover links to its display JPEG and opens in the lightbox; the title and count text don't, the rest of the cover does.
+- **Cover**: the album cover fills 88% of the screen height, with the title (heavy uppercase, 5vw; 9vw on phones) and photo count (cover included, as on the index) bottom left. The cover links to its display JPEG and opens in the lightbox; the title and count text don't, the rest of the cover does.
 - **Mosaic**: below the cover, the photos in a gap-free grid of tiles that crop them (`object-fit: cover`), 4px apart, edge to edge. 4 columns on desktop, 2 up to 1024px (`TABLET_MAX_WIDTH_PX`), 1 on phones. Rows are as tall as a column is wide, so a `small` tile is 1x1, `big` 2x2, `wide` 2x1, and `full` spans the row, 2 rows tall (1 row on tablets). On phones every tile is one square. `mosaic_shapes(count)` gives each photo its shape: blocks of six that close a 4x3 area, the big tile alternating sides:
 
   ```
@@ -84,5 +85,13 @@ Both pages are a centered column (max 640px).
   The last 1-5 photos use a remainder that closes too, so the grid never has holes: `full`; `big, big`; `big, wide, wide`; `big, small, small, wide`; `big, small, small, big, wide`. A negative count raises `ValueError`. `MOSAIC_TILES` in `build.py` holds each shape's width (desktop, tablet) and aspect; keep it in sync with `site.css`.
 - **`sizes`**: `mosaic_sizes(variant, shape)` uses the same crop rule per breakpoint. For example a 3000x2000 photo in a `small` tile: `(max-width: 767px) 150vw, (max-width: 1024px) 75vw, 38vw`.
 - Tiles fade in, and zoom on hover (mouse or pen) or keyboard focus; neither with `prefers-reduced-motion: reduce`.
-- **Lightbox**: the cover and each tile link to their display JPEG. `lightbox.ts` turns a plain click into a `<dialog>` viewer that shows the photo whole (prev/next buttons, arrow keys, swipe, Escape/close/backdrop to close, "n / total" counter). A separate `cover.*` file comes first ("1 / n+1"); a cover that is also one of the photos opens at that photo and isn't shown twice. Tile labels ("Open photo 2 of 5") count the same way. The dialog is rendered only when the build has scripts; without JavaScript the link opens the JPEG. All compiled scripts load on every page and do nothing where their elements are missing. The lightbox stays dark in both themes.
+- **Lightbox**: the cover and each tile link to their display JPEG. `lightbox.ts` turns any left click, including Ctrl/Cmd/Shift/Alt-click (so a modified click can't open the raw image in a new tab), into a `<dialog>` viewer that shows the photo whole (prev/next buttons, arrow keys (Alt+Arrow is left to the browser), swipe, Escape/close/backdrop to close, "n / total" counter). A separate `cover.*` file comes first ("1 / n+1"); a cover that is also one of the photos opens at that photo and isn't shown twice. Tile labels ("Open photo 2 of 5") count the same way. The dialog is rendered only when the build has scripts; without JavaScript the link opens the JPEG. All compiled scripts load on every page and do nothing where their elements are missing. The lightbox stays dark in both themes.
 - **Pager**: below the photos, a full-width "Next album" banner (the next album's cover, darkened, with its title centered) and a "← Previous" link with that album's title in the banner's top-left corner. Both wrap around (`previous_album_index()`, `next_album_index()`). With two albums both links go to the other album. With one album there is no pager.
+
+## Photo protection
+
+Deterrents only; a browser can't stop a visitor from saving what it displays.
+
+- `protect.ts` (every page) blocks the context menu on images, `picture`, photo links (`a[data-lightbox]`), and the viewer (`dialog.lightbox`); dragging images and photo links; and middle-click on photo links. Other right-clicks (text, menu links) work as usual.
+- `site.css` turns off selection, dragging, and the iOS long-press callout on every `img`, and the callout on photo links.
+- Still possible: screenshots, devtools or the network tab, page source, and turning off JavaScript. Without JavaScript a tile click opens the image file.
