@@ -80,8 +80,13 @@ def unique_slugs(slugs: Sequence[str]) -> list[str]:
 
 def is_cover(name: str) -> bool:
     """Whether `name` is an album cover file (`cover.<ext>`, any case)."""
+    return _stem(name) == "cover"
+
+
+def _stem(name: str) -> str:
+    """`name` without its last extension, casefolded."""
     stem, dot, _ = name.rpartition(".")
-    return (stem if dot else name).casefold() == "cover"
+    return (stem if dot else name).casefold()
 
 
 def sync_portfolio(client: DriveClient, root_folder_id: str, cache_dir: Path) -> Manifest:
@@ -97,6 +102,8 @@ def sync_portfolio(client: DriveClient, root_folder_id: str, cache_dir: Path) ->
         albums=_read_albums(client, root_entries),
         about=_find_text_file(root_entries, ABOUT_NAME),
         contact=_find_text_file(root_entries, CONTACT_NAME),
+        about_photo=_find_page_photo(root_entries, "about"),
+        contact_photo=_find_page_photo(root_entries, "contact"),
     )
     originals = _manifest_originals(manifest)
 
@@ -197,6 +204,27 @@ def _find_text_file(root_entries: Sequence[DriveFile], page_name: str) -> TextFi
     )
 
 
+def _find_page_photo(root_entries: Sequence[DriveFile], stem: str) -> Photo | None:
+    """The root image named `<stem>.<ext>` (any case), or None; warns about unusable ones.
+
+    Only images and shortcuts are candidates: other root files (the page's .json, an old
+    about.txt) stay silent, while an unsupported image type (about.gif) or a shortcut warns.
+    """
+    candidates = sorted(
+        (
+            entry
+            for entry in root_entries
+            if (entry.mime_type.startswith("image/") or entry.is_shortcut)
+            and _stem(entry.name) == stem
+        ),
+        key=_drive_order,
+    )
+    usable = [entry for entry in candidates if _is_usable_photo(entry)]
+    for extra in usable[1:]:
+        logger.warning("Skipping %r: using an earlier %s photo instead", extra.name, stem)
+    return _to_photo(usable[0]) if usable else None
+
+
 def _is_usable_page_file(entry: DriveFile) -> bool:
     """Whether `entry` can be downloaded as-is; logs why others are skipped.
 
@@ -232,12 +260,15 @@ def _to_photo(entry: DriveFile) -> Photo:
 
 
 def _manifest_photos(manifest: Manifest) -> list[Photo]:
-    """Every photo and cover in `manifest`."""
+    """Every photo and cover in `manifest`, plus the About and Contact photos."""
     photos: list[Photo] = []
     for album in manifest.albums:
         photos.extend(album.photos)
         if album.cover is not None:
             photos.append(album.cover)
+    photos.extend(
+        photo for photo in (manifest.about_photo, manifest.contact_photo) if photo is not None
+    )
     return photos
 
 

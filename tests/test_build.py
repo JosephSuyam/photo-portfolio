@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from portfolio.models import Album
+from portfolio.models import Album, Photo
 from tests.fixtures.albums import (
     make_album,
     make_photo,
@@ -1326,6 +1326,8 @@ def _build_pages(
     contact_form_url: str | None = None,
     base_path: str = "/",
     albums: list[Album] | None = None,
+    about_photo: Photo | None = None,
+    contact_photo: Photo | None = None,
 ) -> int:
     """Build three albums plus the given about.json / contact.json texts (None = not in Drive)."""
     from portfolio.build import build_site
@@ -1342,6 +1344,8 @@ def _build_pages(
         albums=_three_albums(cache) if albums is None else albums,
         about=about_file,
         contact=contact_file,
+        about_photo=about_photo,
+        contact_photo=contact_photo,
     )
     return build_site(manifest, cache, out, "Site", base_path, contact_form_url=contact_form_url)
 
@@ -1931,3 +1935,149 @@ def test_build_site_about_with_overlong_number_omits_page(cache: Path, out: Path
 
 def test_build_site_about_with_overlong_number_still_builds(cache: Path, out: Path) -> None:
     assert _build_pages(cache, out, about=LONG_NUMBER_ABOUT) == 3
+
+
+# build_site: about and contact photos (split layout)
+
+
+SPLIT_CLASSES = {"split", "split-photo", "split-text"}
+
+
+def _page_photo(cache: Path, page: str, size: tuple[int, int] = (40, 30)) -> Photo:
+    """`<page>.jpg` from the Drive root, with its cached original (id `i-<page>`)."""
+    write_original(cache, f"i-{page}", size=size)
+    return make_photo(f"i-{page}", f"{page}.jpg")
+
+
+def _build_page_photo(
+    cache: Path, out: Path, page: str, photo: Photo, base_path: str = "/", with_text: bool = True
+) -> None:
+    """Build with `photo` as the About or Contact photo; `with_text=False` drops its json."""
+    _build_pages(
+        cache,
+        out,
+        about=ABOUT_TEXT if with_text or page != "about" else None,
+        contact=CONTACT_TEXT if with_text or page != "contact" else None,
+        base_path=base_path,
+        about_photo=photo if page == "about" else None,
+        contact_photo=photo if page == "contact" else None,
+    )
+
+
+def _build_with_photo(cache: Path, out: Path, page: str, base_path: str = "/") -> None:
+    _build_page_photo(cache, out, page, _page_photo(cache, page), base_path)
+
+
+def _split_img(out: Path, page: str) -> Element:
+    return _one(_page(out / page / "index.html"), "div.split figure.split-photo img")
+
+
+def _split_markup(out: Path, page: str) -> list[Element]:
+    root = _page(out / page / "index.html")
+    return [element for element in root.descendants() if SPLIT_CLASSES & set(element.classes)]
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "expected"),
+    [
+        (2000, 1000, "(max-width: 767px) 200vw, 113vw"),
+        (1000, 2000, "(max-width: 767px) 100vw, 50vw"),
+    ],
+)
+def test_split_photo_sizes_returns_crop_width_per_box(
+    width: int, height: int, expected: str
+) -> None:
+    from portfolio.build import split_photo_sizes
+    from portfolio.images import ImageVariant
+
+    variant = ImageVariant(webp_name="x.webp", jpeg_name="x.jpg", width=width, height=height)
+    assert split_photo_sizes(variant) == expected
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_page_photo_text_inside_split_text(cache: Path, out: Path, page: str) -> None:
+    _build_with_photo(cache, out, page)
+    root = _page(out / page / "index.html")
+    assert _one(root, "div.split div.split-text h1.page-heading").text() == page.title()
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_page_photo_img_decorative_and_eager(cache: Path, out: Path, page: str) -> None:
+    _build_with_photo(cache, out, page)
+    img = _split_img(out, page)
+    assert (img.attrs.get("alt"), "loading" in img.attrs) == ("", False)
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_page_photo_image_file_written(cache: Path, out: Path, page: str) -> None:
+    _build_with_photo(cache, out, page, base_path="/portfolio/")
+    src = _split_img(out, page).attrs["src"] or ""
+    assert (out / src.removeprefix("/portfolio/")).is_file()
+
+
+def test_build_site_page_photo_sizes_from_display_variant(
+    cache: Path, out: Path, tmp_path: Path
+) -> None:
+    from portfolio.build import split_photo_sizes
+
+    photo = _page_photo(cache, "about", size=(80, 30))
+    _build_pages(cache, out, about_photo=photo)
+    expected = _expected(cache / "originals" / "i-about", tmp_path / "scratch")
+    assert _split_img(out, "about").attrs["sizes"] == split_photo_sizes(expected.display)
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_page_without_photo_has_no_split_markup(
+    cache: Path, out: Path, page: str
+) -> None:
+    _build_pages(cache, out)
+    assert _split_markup(out, page) == []
+
+
+def test_build_site_about_photo_does_not_split_contact_page(cache: Path, out: Path) -> None:
+    _build_with_photo(cache, out, "about")
+    assert _split_markup(out, "contact") == []
+
+
+def test_build_site_corrupt_page_photo_logs_warning(
+    cache: Path, out: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    write_corrupt_original(cache, "i-about")
+    _build_pages(cache, out, about_photo=make_photo("i-about", "about.jpg"))
+    assert any(message.startswith("Skipping 'about.jpg'") for message in caplog.messages)
+
+
+def test_build_site_corrupt_page_photo_falls_back_to_centred_layout(cache: Path, out: Path) -> None:
+    write_corrupt_original(cache, "i-contact")
+    _build_pages(cache, out, contact_photo=make_photo("i-contact", "contact.jpg"))
+    assert _split_markup(out, "contact") == []
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_photo_of_unwritten_page_not_processed(
+    cache: Path, out: Path, page: str
+) -> None:
+    # The original is absent: processing it would raise BuildError.
+    _build_page_photo(cache, out, page, make_photo(f"i-{page}"), with_text=False)
+    assert not (out / page).exists()
+
+
+@pytest.mark.parametrize("page", ["about", "contact"])
+def test_build_site_page_photo_original_missing_raises_build_error(
+    cache: Path, out: Path, page: str
+) -> None:
+    from portfolio.build import BuildError
+
+    photo = make_photo(f"i-{page}", f"{page}.jpg")
+    with pytest.raises(
+        BuildError, match=rf"'{page}\.jpg' is missing from .*Run `portfolio sync` again"
+    ):
+        _build_page_photo(cache, out, page, photo)
+
+
+def test_build_site_page_photo_unsafe_id_raises_build_error(cache: Path, out: Path) -> None:
+    from portfolio.build import BuildError
+
+    with pytest.raises(BuildError):
+        _build_pages(cache, out, about_photo=make_photo("../evil", "about.jpg"))

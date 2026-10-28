@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from "macros.html" import split_layout %}
 {% set nav_about_current = true %}
 {% set page_class = "page-text" %}
 {% block title %}About | {{ site_title }}{% endblock %}
 {% block content %}
+{% call split_layout(photo) -%}
 <h1 class="page-heading">About</h1>
 <section class="text-column">
   <p class="lede">{{ about.lede }}</p>
@@ -17,4 +19,5 @@
   <p class="signoff">Commissions and print enquiries: <a class="text-link" href="{{ base_path }}contact/">Contact</a></p>
   {% endif %}
 </section>
+{%- endcall %}
 {% endblock %}

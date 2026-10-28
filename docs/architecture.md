@@ -4,7 +4,7 @@
 Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--> browser
 ```
 
-- **sync** (`sync.py`, via `drive.py`): lists albums, photos, and the root `about.json` / `contact.json`, downloads only what changed (`md5Checksum`/`modifiedTime`), and removes cache entries deleted from Drive.
+- **sync** (`sync.py`, via `drive.py`): lists albums, photos, the root `about.json` / `contact.json`, and their optional `about.*` / `contact.*` photos, downloads only what changed (`md5Checksum`/`modifiedTime`), and removes cache entries deleted from Drive.
 - **build** (`build.py`, `images.py`, `pages.py`, `scripts.py`): compiles `src/portfolio/ts/` with the project's local `tsc` into a temporary folder, makes content-hashed thumbnails and display images (WebP + JPEG), then renders Jinja2 templates into `dist/`. Scripts:
   - `theme.ts`: light/dark toggle in the header
   - `lightbox.ts`: album photo viewer
@@ -19,8 +19,9 @@ Google Drive --sync--> .cache/ + manifest.json --build--> dist/ --serve/deploy--
 
 ## Cache contract (sync -> build)
 
-- `.cache/manifest.json`: `{"albums": [Album, ...], "about": TextFile | null, "contact": TextFile | null}` (see `models.py`), already ordered, titled, and slugged by sync. Build renders albums in this order. `about`/`contact` are optional, so older manifests without them still load.
-- `.cache/originals/<file_id>`: the downloaded original for each photo and page file, with the same incremental download and stale-removal rules. File IDs must match `[A-Za-z0-9_-]+`.
+- `.cache/manifest.json`: `{"albums": [Album, ...], "about": TextFile | null, "contact": TextFile | null, "about_photo": Photo | null, "contact_photo": Photo | null}` (see `models.py`), already ordered, titled, and slugged by sync. Build renders albums in this order. `about`, `contact`, `about_photo`, and `contact_photo` are optional, so older manifests without them still load.
+- `about_photo` / `contact_photo`: the root `about.<ext>` / `contact.<ext>` image ([naming](drive-conventions.md#about-and-contact-pages)), same shape as an album `Photo`. Sync records it even without the matching `.json`; build then ignores it.
+- `.cache/originals/<file_id>`: the downloaded original for each photo (album, cover, About, Contact) and page file, with the same incremental download and stale-removal rules. File IDs must match `[A-Za-z0-9_-]+`.
 
 ## Build output
 
@@ -37,7 +38,7 @@ dist/
 ```
 
 - Slugs must be lowercase letters and digits with single hyphens, unique, and not `work`, `static`, `images`, `about`, `contact`, or `api`; otherwise the build fails.
-- A photo that can't be decoded is skipped with a warning. A page file that is too large, not UTF-8, not valid JSON, or the wrong shape leaves its page out with a warning. A missing original fails the build.
+- A photo that can't be decoded is skipped with a warning; an About or Contact photo that can't be decoded leaves its page in the centered layout. A page file that is too large, not UTF-8, not valid JSON, or the wrong shape leaves its page out with a warning. A missing original fails the build.
 - The site is built in `.dist.staging/` and swapped in only on success, so a failed build leaves the previous `dist/` as it was. Build refuses to replace a non-empty `dist/` without the `.portfolio-build` marker.
 - Derived images carry no EXIF or other source metadata (only the ICC color profile).
 - Every build re-processes every photo; caching derived images is a planned optimization.
@@ -58,10 +59,12 @@ Drive is never called at page-view time, and Drive links never appear in the out
 
 `pages.py` reads the root JSON files ([format](drive-conventions.md#about-and-contact-pages)) and validates them with pydantic models (`AboutFile`, `ContactFile`, `ContactDetail`; unknown keys ignored, strings stripped, no type coercion). Validation warnings name the field (`details.1.label`) but never echo the file's contents. All Drive text is autoescaped; only `http(s)://` and email values become links.
 
-Both pages are a centered column (max 640px).
+Without a photo, both pages are a centered column (max 640px).
+
+With a photo (`about_photo` / `contact_photo`), the page is split in two columns: the photo fills the left half at full screen height and stays put (`position: sticky`) while the text scrolls on the right, left-aligned. On phones the photo is a band 56% of the screen tall above the text. Build runs the photo through the same image pipeline as album photos, only for pages it writes. It is decorative (`alt=""`) and loads eagerly. `split_photo_sizes(variant)` gives its `sizes`, using the same crop rule as `cover_sizes` with an 8:9 box (`SPLIT_PHOTO_ASPECT`, half of a 16:9 window), square on phones (`PHONE_SPLIT_PHOTO_ASPECT`); keep them in sync with `.split` in `site.css`.
 
 - **About**: "About" heading, the lede centered in large type, then the paragraphs. With a Contact page it ends with a centered "Commissions and print enquiries: Contact" link.
-- **Contact**: "Contact" heading, the first email as a large, underlined, centered `mailto:` link, then the other entries (label above value) in a centered row that wraps.
+- **Contact**: "Contact" heading, the first email as a large, underlined, centered `mailto:` link, then the other entries (label above value) in a centered row that wraps. In the split layout the email is left-aligned and the entries become ruled rows, label left and value right.
 - **Form**: only when `CONTACT_FORM_URL` is set ([Setup](setup.md#contact-form-optional)). A plain HTML POST of `name`, `email`, `message`, and a visually hidden honeypot `_gotcha` straight to the form service; no JavaScript.
 
 ## Album index
