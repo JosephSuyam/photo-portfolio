@@ -15,6 +15,15 @@ A 404 or 403 on the root folder usually means it is not shared with the service 
 
 Environment variables override `.env`. If you edit `.env` while VS Code is open, restart it: its terminals may still carry the old values.
 
+## Photo on About or Contact (optional)
+
+Gives the page a split layout: the photo fills the left half and stays put while the text scrolls; on phones it sits on top.
+
+1. Upload the image to the Drive root, next to `about.json` / `contact.json`, named `about.<ext>` or `contact.<ext>` (JPEG, PNG, or WebP), e.g. `about.jpg`. Case doesn't matter (`About.JPG` works); other names (`about-me.jpg`) don't. More rules: [Drive folder conventions](drive-conventions.md#about-and-contact-pages).
+2. Run `uv run portfolio all`.
+
+The page needs its `.json` too; a photo alone creates no page. To remove the photo, delete it from Drive and run `uv run portfolio all` again: the page goes back to the centered layout.
+
 ## Contact form (optional)
 
 Adds a "Send a message" form to the Contact page. The site is static, so a form service receives the messages. The Contact page needs a usable `contact.json`; without one, `portfolio build` warns that the form is not shown.
