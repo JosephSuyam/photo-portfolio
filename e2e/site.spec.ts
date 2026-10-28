@@ -1242,10 +1242,20 @@ test.describe("album hero cover link", () => {
     await expect(lightboxCounter(page)).toHaveText(counter(2, coverFileTotal));
   });
 
-  test("clicking the album title opens the viewer on the cover", async ({ page }) => {
+  for (const selector of ["h1.album-heading", ".album-hero .album-count", ".album-hero-text"]) {
+    test(`clicking ${selector} does not open the viewer`, async ({ page }) => {
+      await page.goto(`/${FIRST_ALBUM.slug}/`);
+      const box = await boxOf(page.locator(selector));
+      await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+      await page.waitForTimeout(300);
+      await expect(lightbox(page)).toBeHidden();
+    });
+  }
+
+  test("clicking the cover above the caption opens the viewer on the cover", async ({ page }) => {
     await page.goto(`/${FIRST_ALBUM.slug}/`);
-    const heading = await boxOf(page.locator("h1.album-heading"));
-    await page.mouse.click(heading.x + heading.width / 2, heading.y + heading.height / 2);
+    const caption = await boxOf(page.locator(".album-hero-text"));
+    await page.mouse.click(caption.x + caption.width / 2, caption.y - 20);
     await expect(lightboxCounter(page)).toHaveText(counter(1, coverFileTotal));
   });
 
@@ -1287,13 +1297,15 @@ test.describe("album hero cover link", () => {
     await expect.poll(() => lightboxImageSrc(page)).toBe(href);
   });
 
-  test("album title is smaller than an index scene title", async ({ page }) => {
+  test("album and index scene titles are 5vw, 9vw on phones", async ({ page }) => {
     const fontSize = (locator: Locator) =>
       locator.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    const width = page.viewportSize()!.width;
+    const expected = width * (width <= 767 ? 0.09 : 0.05);
     await page.goto("/work/");
-    const sceneTitle = await fontSize(page.locator(".scene-title").first());
+    expect(await fontSize(page.locator(".scene-title").first())).toBeCloseTo(expected, 0);
     await page.goto(`/${FIRST_ALBUM.slug}/`);
-    expect(await fontSize(page.locator("h1.album-heading"))).toBeLessThan(sceneTitle);
+    expect(await fontSize(page.locator("h1.album-heading"))).toBeCloseTo(expected, 0);
   });
 });
 
