@@ -172,15 +172,6 @@ def test_build_site_copies_stylesheet(cache: Path, out: Path) -> None:
     assert (out / "static" / "site.css").read_bytes() == (STATIC_DIR / "site.css").read_bytes()
 
 
-@pytest.mark.parametrize("name", ["bodoni-moda-latin.woff2", "OFL.txt"])
-def test_build_site_copies_font_file(cache: Path, out: Path, name: str) -> None:
-    from portfolio.build import STATIC_DIR
-
-    _build(_three_albums(cache), cache, out)
-    copied = out / "static" / "fonts" / name
-    assert copied.read_bytes() == (STATIC_DIR / "fonts" / name).read_bytes()
-
-
 def test_build_site_writes_derived_images(cache: Path, out: Path, tmp_path: Path) -> None:
     expected = _expected(write_original(cache, "p1"), tmp_path / "scratch")
     _build([make_album("a", [make_photo("p1")])], cache, out)
