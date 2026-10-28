@@ -4,8 +4,9 @@ on:
   push:
     branches: [main]
   schedule:
-    # Hourly keeps a private repo well inside the free Actions minutes.
-    - cron: "0 * * * *"
+    # Every 12 hours: a fallback sync that renews the 24-hour Drive webhook channel in time
+    # while keeping only ~2 channels live (each one POSTs on every Drive change).
+    - cron: "0 */12 * * *"
   workflow_dispatch:
   # Sent by the Vercel function api/drive-webhook.mjs when Drive reports a change.
   repository_dispatch:
@@ -116,8 +117,8 @@ jobs:
           key: portfolio-cache-${{ github.run_id }}
 
       # `portfolio subscribe` opens a 24-hour channel. Every run except webhook-triggered ones
-      # renews it, so one stays live through hours-long cron gaps and after a failed
-      # sync/deploy (the key file is written before sync). Dispatch runs skip it so channels
+      # renews it, so one stays live across the 12-hour cron (even if GitHub delays a run)
+      # and after a failed sync/deploy (the key file is written before sync). Dispatch runs skip it so channels
       # don't pile up with each Drive change. Overlapping channels only send duplicate
       # notifications, which collapse because `concurrency` keeps one pending run (newer ones
       # cancel it) and the skip-if-unchanged check.
