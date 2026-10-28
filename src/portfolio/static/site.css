@@ -327,13 +327,20 @@ html:has(.scenes) { scroll-snap-type: y mandatory; }
   outline-offset: -8px;
 }
 
-/* The caption sits above the cover link, so clicks on it do not open the cover. */
+/* Only the title and count text block clicks (and can be selected); clicks on the rest of
+   the caption strip fall through to the cover link. */
 .album-hero-text {
   position: absolute;
   right: 40px;
   bottom: 48px;
   left: 40px;
   z-index: 1;
+  pointer-events: none;
+}
+
+.album-hero-text > * {
+  width: fit-content;
+  pointer-events: auto;
 }
 
 /* Tile spans match MOSAIC_TILES in build.py (its widths and aspects follow from them); its
