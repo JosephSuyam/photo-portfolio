@@ -318,8 +318,8 @@ def test_parse_about_invalid_json_warning_has_line_and_column(
 def test_parse_about_invalid_json_on_later_line_reports_that_line(
     warnings_logged: pytest.LogCaptureFixture,
 ) -> None:
-    parse_about('{\n  "lede": "x",\n}\n')
-    assert "(line 3, column 1)" in _only_warning(warnings_logged)
+    parse_about('{\n  "lede": "x",\n  oops\n}\n')
+    assert "(line 3, column 3)" in _only_warning(warnings_logged)
 
 
 def test_parse_about_invalid_json_never_logs_text(caplog: pytest.LogCaptureFixture) -> None:
