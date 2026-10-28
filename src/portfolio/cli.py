@@ -1,18 +1,18 @@
-"""Command-line entry point: `portfolio sync | build | serve | watch | all`."""
+"""Command-line entry point: `portfolio sync | build | serve | watch | subscribe | all`."""
 
 import logging
 import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 from google.auth.exceptions import GoogleAuthError
 from httplib2 import HttpLib2Error
 
 from portfolio.build import BuildError, base_path_from_url, build_site, load_manifest
-from portfolio.config import ConfigError, load_settings, load_site_settings
+from portfolio.config import ConfigError, load_settings, load_site_settings, load_webhook_settings
 from portfolio.drive import DriveError, GoogleDriveClient
 from portfolio.scripts import NodeNotFoundError, ScriptError, compile_scripts
 from portfolio.server import make_preview_server
@@ -38,8 +38,21 @@ def sync() -> None:
     except ConfigError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error
+    client = _drive_client(settings.credentials_path)
     try:
-        client = GoogleDriveClient.from_credentials(settings.credentials_path)
+        manifest = sync_portfolio(client, settings.root_folder_id, CACHE_DIR)
+    except (DriveError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+    except (GoogleAuthError, HttpLib2Error) as error:
+        _exit_unreachable(error)
+    count = len(manifest.albums)
+    typer.echo(f"Synced {count} album{'' if count == 1 else 's'} into {CACHE_DIR}/")
+
+
+def _drive_client(credentials_path: Path) -> GoogleDriveClient:
+    try:
+        return GoogleDriveClient.from_credentials(credentials_path)
     except (OSError, ValueError) as error:
         # The underlying message can echo the key path or contents, so name the setting only.
         typer.echo(
@@ -47,20 +60,15 @@ def sync() -> None:
             err=True,
         )
         raise typer.Exit(code=1) from error
-    try:
-        manifest = sync_portfolio(client, settings.root_folder_id, CACHE_DIR)
-    except (DriveError, OSError) as error:
-        typer.echo(str(error), err=True)
-        raise typer.Exit(code=1) from error
-    except (GoogleAuthError, HttpLib2Error) as error:
-        typer.echo(
-            f"Cannot reach Google Drive ({type(error).__name__}). Check the network connection "
-            "and that the key named by GOOGLE_APPLICATION_CREDENTIALS is valid.",
-            err=True,
-        )
-        raise typer.Exit(code=1) from error
-    count = len(manifest.albums)
-    typer.echo(f"Synced {count} album{'' if count == 1 else 's'} into {CACHE_DIR}/")
+
+
+def _exit_unreachable(error: Exception) -> NoReturn:
+    typer.echo(
+        f"Cannot reach Google Drive ({type(error).__name__}). Check the network connection "
+        "and that the key named by GOOGLE_APPLICATION_CREDENTIALS is valid.",
+        err=True,
+    )
+    raise typer.Exit(code=1) from error
 
 
 @app.command()
@@ -164,6 +172,33 @@ def _rebuild(session: WatchSession, changes: list[Path] | None) -> None:
         typer.echo(f"Rebuilt in {time.monotonic() - started:.1f}s")
     else:
         typer.echo("Build failed; dist/ still has the last good site.", err=True)
+
+
+WEBHOOK_TTL_SECONDS = 3 * 60 * 60
+
+
+@app.command()
+def subscribe() -> None:
+    """Point Drive change notifications at DRIVE_WEBHOOK_URL for the next three hours.
+
+    Run it more often than that (the deploy workflow renews it hourly) to keep one live
+    channel; the spare hour covers a late or failed scheduled run.
+    """
+    try:
+        settings = load_settings()
+        address, token = load_webhook_settings()
+    except ConfigError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+    client = _drive_client(settings.credentials_path)
+    try:
+        expires = client.watch_changes(address, token, WEBHOOK_TTL_SECONDS)
+    except DriveError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+    except (GoogleAuthError, HttpLib2Error, OSError) as error:
+        _exit_unreachable(error)
+    typer.echo(f"Drive change notifications active until {expires:%Y-%m-%d %H:%M} UTC")
 
 
 @app.command(name="all")

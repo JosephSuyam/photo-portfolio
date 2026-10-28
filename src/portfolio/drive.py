@@ -1,7 +1,9 @@
 """Google Drive access. This is the only module that talks to Google, and it only reads."""
 
 import logging
-from datetime import datetime
+import time
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -166,3 +168,37 @@ class GoogleDriveClient:
             partial.unlink(missing_ok=True)
             raise
         partial.replace(dest)
+
+    def watch_changes(self, address: str, token: str, ttl_seconds: int) -> datetime:
+        """Ask Drive to POST to `address` on any change visible to this account; return expiry.
+
+        Drive sends `token` back in the `X-Goog-Channel-Token` header of every notification.
+        Channels are not stopped: they lapse after `ttl_seconds`, so callers renew before then.
+        """
+        expires_ms = int((time.time() + ttl_seconds) * 1000)
+        try:
+            start = (
+                self._service.changes()
+                .getStartPageToken(supportsAllDrives=True)
+                .execute(num_retries=_NUM_RETRIES)
+            )
+            channel = (
+                self._service.changes()
+                .watch(
+                    pageToken=start["startPageToken"],
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                    body={
+                        "id": str(uuid.uuid4()),
+                        "type": "web_hook",
+                        "address": address,
+                        "token": token,
+                        "expiration": expires_ms,
+                    },
+                )
+                # No retries: a retried success would reuse the channel id and fail.
+                .execute()
+            )
+        except HttpError as exc:
+            raise _drive_error(exc, "change subscription") from exc
+        return datetime.fromtimestamp(int(channel["expiration"]) / 1000, tz=UTC)

@@ -31,3 +31,24 @@ Adds a "Send a message" form to the Contact page. The site is static, so a form 
 4. To remove the form, unset `CONTACT_FORM_URL` and build again: the Contact page then shows links only.
 
 The form posts `name`, `email`, and `message`, plus an empty hidden honeypot field `_gotcha` that spam bots tend to fill in. The endpoint is visible in the page's HTML, as with any form. The service's free-tier limits, cost, and where it stores visitor messages are your choice and responsibility. Tests never call the service.
+
+## Instant redeploy on Drive changes (optional)
+
+Without this, the Deploy workflow picks up Drive changes on its hourly schedule. With it, a Drive change redeploys within about a minute: Drive push channel -> Vercel function `/api/drive-webhook` (built from `src/portfolio/api/drive-webhook.mjs` into `dist/api/`) -> GitHub `repository_dispatch` event `drive-changed` -> Deploy workflow. The hourly schedule stays as a fallback and renews the channel with `portfolio subscribe` (each channel lasts 3 hours).
+
+1. Generate a random token of at most 256 characters, e.g. `openssl rand -hex 32`.
+2. Create a fine-grained GitHub personal access token for this repository only, with **Contents: Read and write**.
+3. In the Vercel project, add these Production environment variables:
+   - `WEBHOOK_TOKEN`: the token from step 1
+   - `GITHUB_DISPATCH_TOKEN`: the access token from step 2
+   - `GITHUB_REPO`: `owner/name`
+4. In the GitHub `production` environment, add:
+   - secret `DRIVE_WEBHOOK_TOKEN`: the same token as `WEBHOOK_TOKEN`
+   - variable `DRIVE_WEBHOOK_URL`: `https://<site-domain>/api/drive-webhook`. The function sits at the deployment root, even when `SITE_BASE_URL` has a path.
+5. Deploy once so the function exists. Then set `DRIVE_WEBHOOK_URL` and `DRIVE_WEBHOOK_TOKEN` in `.env` (see `.env.example`) and run `uv run portfolio subscribe`, or wait for the next hourly run.
+6. Check: change something in Drive. A Deploy run with event `repository_dispatch` should start within about a minute.
+
+Notes:
+- `repository_dispatch` runs on the repository's default branch, which must be `main`.
+- Drive also notifies about changes outside the portfolio folder. Runs with no Drive or code change skip the build and deploy.
+- The endpoint answers 403 to requests without the token.

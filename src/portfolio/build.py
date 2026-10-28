@@ -25,10 +25,11 @@ from portfolio.pages import AboutPage, ContactPage, parse_about, parse_contact, 
 
 logger = logging.getLogger(__name__)
 
-RESERVED_SLUGS = frozenset({"work", "static", "images", "about", "contact"})
+RESERVED_SLUGS = frozenset({"work", "static", "images", "about", "contact", "api"})
 BUILD_MARKER = ".portfolio-build"
 IMAGES_DIR = "images"
 STATIC_DIR = Path(__file__).parent / "static"
+API_DIR = Path(__file__).parent / "api"
 
 MOBILE_MAX_WIDTH_PX = 767
 
@@ -239,6 +240,7 @@ def build_site(
             contact_form_url=contact_form_url,
         )
         shutil.copytree(STATIC_DIR, staging / "static")
+        shutil.copytree(API_DIR, staging / "api")
         for script in scripts:
             shutil.copy2(script, staging / "static" / script.name)
         (staging / BUILD_MARKER).touch()
