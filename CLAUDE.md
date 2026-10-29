@@ -48,8 +48,8 @@ The `orchestrator` agent (`claude --agent orchestrator`) plans, delegates, verif
 
 ## Safety
 - Never read, print, or commit `.env`, the service-account key, or tokens; error messages must not echo the key's path or contents. Never commit photos, `.cache/`, or `dist/`. Never write to or delete anything in Drive.
-- `.claude/hooks/guard.py` (PreToolUse) enforces the git, secret, and `dist/`/`.cache/` rules here; a block is a rule, not a bug to route around.
-- Ask before: deleting files, installing dependencies, force-pushing, rewriting history, deploying, or spending paid credits.
+- `.claude/hooks/guard.py` (PreToolUse) enforces the git, secret, and `dist/`/`.cache/` rules here and makes the user confirm any merge or push into `main`; a block is a rule, not a bug to route around.
+- Ask before: deleting files, installing dependencies, merging or pushing into `main`, force-pushing, rewriting history, deploying, or spending paid credits.
 - Work on feature branches merged into `develop`. Small conventional commits; before committing, check `git status` and leave out unrelated work. Never `git checkout -- .` or reset the main checkout to tidy up: uncommitted work lives there.
 - Windows, Git Bash. Multi-line edits: Edit tool or a script in `.tmp/` (inline heredocs with nested quotes break). Throwaway files go in `.tmp/`.
 

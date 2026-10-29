@@ -33,6 +33,13 @@ GIT_BLOCKLIST = [
 ]
 GIT_COMMIT = re.compile(r"\bgit\b[^;&|\n]*\bcommit\b")
 QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
+
+# Merges into main need the user's confirmation (permissionDecision "ask"), even in auto mode.
+GIT_MERGE = re.compile(r"\bgit\b[^;&|\n]*\bmerge(?![\w-])")
+GIT_PUSH = re.compile(r"\bgit\b[^;&|\n]*\bpush\b")
+SWITCH_TO_MAIN = re.compile(r"\bgit\b[^;&|\n]*\b(switch|checkout)\s+main(?![\w/-])")
+PUSH_TO_MAIN = re.compile(r"\bgit\b[^;&|\n]*\bpush\b[^;&|\n]*[\s:/]main(?![\w/-])")
+GH_PR_MERGE = re.compile(r"\bgh\s+pr\s+merge\b([^;&|\n]*)")
 PROTECTED_BRANCHES = {"main", "develop"}
 
 # Mirrors the secret patterns in .gitignore.
@@ -91,6 +98,35 @@ def check_command(command: str, cwd: str) -> str | None:
     return None
 
 
+def pr_base(merge_args: str, cwd: str) -> str | None:
+    # shortcut: only a PR number or URL is read as the selector, else gh uses the current branch
+    selector = re.findall(r"(?<!\S)(\d+|https://\S+)(?!\S)", merge_args)[:1]
+    command = ["gh", "pr", "view", *selector, "--json", "baseRefName", "-q", ".baseRefName"]
+    try:
+        result = subprocess.run(
+            command, cwd=cwd, capture_output=True, text=True, check=False, timeout=20
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def needs_confirmation(command: str, cwd: str) -> str | None:
+    unquoted = QUOTED.sub("''", command)
+    git_merge = GIT_MERGE.search(unquoted)
+    git_push = GIT_PUSH.search(unquoted)
+    if git_merge or git_push:
+        on_main = current_branch(cwd) == "main"
+        if git_merge and (on_main or SWITCH_TO_MAIN.search(unquoted)):
+            return "this merges into main"
+        if git_push and (on_main or PUSH_TO_MAIN.search(unquoted)):
+            return "this pushes to main, which deploys the site"
+    gh_merge = GH_PR_MERGE.search(unquoted)
+    if gh_merge and pr_base(gh_merge.group(1), cwd) in (None, "main"):
+        return "this merges a PR into main (or its base could not be checked)"
+    return None
+
+
 def check_path(tool: str, raw: str, project: Path) -> str | None:
     path = (project / raw).resolve() if not Path(raw).is_absolute() else Path(raw).resolve()
     key = key_path()
@@ -122,6 +158,14 @@ def main() -> int:
     if reason:
         print(f"Blocked by .claude/hooks/guard.py: {reason}.", file=sys.stderr)
         return 2
+    confirm = needs_confirmation(command, cwd) if isinstance(command, str) else None
+    if confirm:
+        decision = {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "ask",
+            "permissionDecisionReason": f"Merging into main needs your confirmation: {confirm}.",
+        }
+        print(json.dumps({"hookSpecificOutput": decision}))
     return 0
 
 

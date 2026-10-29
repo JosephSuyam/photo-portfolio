@@ -39,7 +39,7 @@ Write `.tmp/<slug>-spec.md`: behavior, exact markup/selectors/function names, ex
 ## 6. Finish
 - Final ruff + mypy, actually run and green. Never weaken a test.
 - `git status`; atomic conventional commits (usually `feat`, `test`, `docs`) with no `Co-Authored-By` or other trailers unless the session gives attribution lines; add new files explicitly; leave unrelated work (e.g. `.vscode/`) out.
-- Ask before: deleting files, installing dependencies, merging, pushing, deploying. A direct user request (e.g. "merge to develop") is that approval for that step only; `/ship` or "ship it" approves push, PR into `develop`, and merge after green CI (run the `ship` skill).
+- Ask before: deleting files, installing dependencies, merging, pushing, deploying. A direct user request (e.g. "merge to develop") is that approval for that step only; `/ship` or "ship it" approves push, PR into `develop`, and merge after green CI (run the `ship` skill). Merging or pushing into `main` always needs the user's explicit yes, and the guard hook prompts for it.
 - The guard hook blocks commits on `main`/`develop`, force-pushes, destructive resets, secret access, and hand edits of `dist/`/`.cache/`. Don't work around a block; ask the user.
 - Stop servers you started on 8124; leave 8000 running.
 - End with the CLAUDE.md summary: Result, What changed (table), How it was verified, Decisions and open items, and the next step as a question (for finished features: "Ship it?").
