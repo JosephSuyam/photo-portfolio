@@ -36,7 +36,7 @@ The `orchestrator` agent (`claude --agent orchestrator`) plans, delegates, verif
 1. Understand; ask if ambiguous; plan briefly for 3+ files or a public interface.
 2. The smallest change that works. No new tests unless the user asks (features: see 4).
 3. `uv run ruff check . && uv run mypy src` and a manual run (`portfolio watch`; UI: `preview-site`). Then `code-reviewer`: fix blocking and should-fix findings. Docs only when the user asks (features: see 4).
-4. Features by default also get tests (`test-writer`), docs (`doc-writer`), `run-tests`, and `security-review`.
+4. Features by default also get tests (`test-writer`), docs (`doc-writer`), `run-tests`, and the built-in `/security-review`.
 
 **Done means:** ruff and mypy green and the change seen working; no open blocking review findings; no debug prints, commented-out code, or TODOs without an issue. Never weaken, skip, or mock away what a test checks. Tests never touch the real Drive or the network. If something cannot be run, say so.
 
@@ -48,8 +48,8 @@ The `orchestrator` agent (`claude --agent orchestrator`) plans, delegates, verif
 
 ## Safety
 - Never read, print, or commit `.env`, the service-account key, or tokens; error messages must not echo the key's path or contents. Never commit photos, `.cache/`, or `dist/`. Never write to or delete anything in Drive.
-- `.claude/hooks/guard.py` (PreToolUse) enforces the git, secret, and `dist/`/`.cache/` rules here and makes the user confirm any merge or push into `main`; a block is a rule, not a bug to route around.
-- Ask before: deleting files, installing dependencies, merging or pushing into `main`, force-pushing, rewriting history, deploying, or spending paid credits.
+- `.claude/hooks/guard.py` (PreToolUse) enforces the git, secret, and `dist/`/`.cache/` rules here and makes the user confirm any merge or push into `main`; a block is a rule, not a bug to route around (if it only matched message text, pass the text from a `.tmp/` file with `git commit -F` or `--body-file`).
+- Ask before: deleting files, installing dependencies, merging or pushing (`/ship` approves a feature branch into `develop`; `main` always needs an explicit yes), force-pushing, rewriting history, deploying, or spending paid credits.
 - Work on feature branches merged into `develop`. Small conventional commits; before committing, check `git status` and leave out unrelated work. Never `git checkout -- .` or reset the main checkout to tidy up: uncommitted work lives there.
 - Windows, Git Bash. Multi-line edits: Edit tool or a script in `.tmp/` (inline heredocs with nested quotes break). Throwaway files go in `.tmp/`.
 
