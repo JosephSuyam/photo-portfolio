@@ -31,11 +31,12 @@ A photographer portfolio, generated from a Google Drive folder: root = portfolio
 - `portfolio build` compiles `src/portfolio/ts/` into `dist/static/`; compiled JS is never committed. Without Node it warns and builds without the script.
 
 ## How we work
-The `orchestrator` agent (`claude --agent orchestrator`, or `/orchestrate <task>` from any session) plans, delegates, verifies, and summarizes; only it delegates (other agents have no Agent tool). Agents: `implementer` (code), `test-writer` (pytest + Playwright), `debugger`, `code-reviewer`, `doc-writer`; skills: `run-tests` (Full check), `preview-site` (screenshots). Delegate large or noisy work with goal, paths, constraints, and output format; do small edits yourself.
+The `orchestrator` agent (`claude --agent orchestrator`) plans, delegates, verifies, and summarizes; only it delegates (other agents have no Agent tool). Agents: `implementer` (code), `test-writer` (pytest + Playwright), `debugger`, `code-reviewer`, `doc-writer`; skills: `run-tests` (Full check), `preview-site` (screenshots), `ship` (push, PR into `develop`, CI, merge). Delegate large or noisy work with goal, paths, constraints, and output format; do small edits yourself.
 
 1. Understand; ask if ambiguous; plan briefly for 3+ files or a public interface.
-2. The smallest change that works. No new tests unless the user asks.
-3. `uv run ruff check . && uv run mypy src` and a manual run (`portfolio watch`; UI: `preview-site`). Then `code-reviewer`: fix blocking and should-fix findings. Docs only when the user asks.
+2. The smallest change that works. No new tests unless the user asks (features: see 4).
+3. `uv run ruff check . && uv run mypy src` and a manual run (`portfolio watch`; UI: `preview-site`). Then `code-reviewer`: fix blocking and should-fix findings. Docs only when the user asks (features: see 4).
+4. Features by default also get tests (`test-writer`), docs (`doc-writer`), `run-tests`, and the built-in `/security-review`.
 
 **Done means:** ruff and mypy green and the change seen working; no open blocking review findings; no debug prints, commented-out code, or TODOs without an issue. Never weaken, skip, or mock away what a test checks. Tests never touch the real Drive or the network. If something cannot be run, say so.
 
@@ -47,7 +48,8 @@ The `orchestrator` agent (`claude --agent orchestrator`, or `/orchestrate <task>
 
 ## Safety
 - Never read, print, or commit `.env`, the service-account key, or tokens; error messages must not echo the key's path or contents. Never commit photos, `.cache/`, or `dist/`. Never write to or delete anything in Drive.
-- Ask before: deleting files, installing dependencies, force-pushing, rewriting history, deploying, or spending paid credits.
+- `.claude/hooks/guard.py` (PreToolUse) enforces the git, secret, and `dist/`/`.cache/` rules here and makes the user confirm any merge or push into `main`; a block is a rule, not a bug to route around (if it only matched message text, pass the text from a `.tmp/` file with `git commit -F` or `--body-file`).
+- Ask before: deleting files, installing dependencies, merging or pushing (`/ship` approves a feature branch into `develop`; `main` always needs an explicit yes), force-pushing, rewriting history, deploying, or spending paid credits.
 - Work on feature branches merged into `develop`. Small conventional commits; before committing, check `git status` and leave out unrelated work. Never `git checkout -- .` or reset the main checkout to tidy up: uncommitted work lives there.
 - Windows, Git Bash. Multi-line edits: Edit tool or a script in `.tmp/` (inline heredocs with nested quotes break). Throwaway files go in `.tmp/`.
 
