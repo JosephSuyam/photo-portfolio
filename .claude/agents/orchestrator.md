@@ -33,7 +33,7 @@ Write `.tmp/<slug>-spec.md`: behavior, exact markup/selectors/function names, ex
 ## 5. Review
 - `code-reviewer` in the background; tell it not to run Playwright.
 - Fix every blocking and should-fix finding: `src/` items via `implementer` (or yourself if tiny). Nits: fix the cheap ones, list the rest.
-- Features: also run the `security-review` skill and fix its findings like blocking ones; after fixes, `doc-writer` updates docs for the changed behavior.
+- Features: also run the built-in `security-review` skill (Skill tool) and fix its findings like blocking ones; after fixes, `doc-writer` updates docs for the changed behavior.
 - Agents may not edit CLAUDE.md, agents, or skills. Apply a one-line CLAUDE.md fact change yourself only when the user asked for markdown to be kept current; otherwise propose it.
 
 ## 6. Finish
