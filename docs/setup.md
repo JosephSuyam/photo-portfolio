@@ -37,6 +37,7 @@ Adds a "Send a message" form to the Contact page. The site is static, so a form 
 
    Only `https://` URLs are accepted. Otherwise `portfolio sync` and `portfolio build` stop with `CONTACT_FORM_URL must be an https:// URL.`
 3. Restart VS Code if it injects `.env`, then run `uv run portfolio build`.
+   For the deployed site, also add a variable `CONTACT_FORM_URL` with the same endpoint in the GitHub `production` environment: the Deploy workflow reads it from there, not from `.env`.
 4. To remove the form, unset `CONTACT_FORM_URL` and build again: the Contact page then shows links only.
 
 The form posts `name`, `email`, and `message`, plus an empty hidden honeypot field `_gotcha` that spam bots tend to fill in. The endpoint is visible in the page's HTML, as with any form. The service's free-tier limits, cost, and where it stores visitor messages are your choice and responsibility. Tests never call the service.
