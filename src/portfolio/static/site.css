@@ -784,7 +784,8 @@ html:has(.lightbox[open]) { overflow: hidden; }
 
   .site-nav { gap: 8px 20px; }
 
-  .scene-number { top: 64px; right: 20px; }
+  /* Clears a header that wraps to two lines (about 88px tall). */
+  .scene-number { top: 100px; right: 20px; }
 
   .scene-text,
   .album-hero-text { right: 20px; bottom: 20px; left: 20px; }
