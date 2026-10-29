@@ -31,7 +31,7 @@ A photographer portfolio, generated from a Google Drive folder: root = portfolio
 - `portfolio build` compiles `src/portfolio/ts/` into `dist/static/`; compiled JS is never committed. Without Node it warns and builds without the script.
 
 ## How we work
-The `orchestrator` agent (`claude --agent orchestrator`, or `/orchestrate <task>` from any session) plans, delegates, verifies, and summarizes; only it delegates (other agents have no Agent tool). Agents: `implementer` (code), `test-writer` (pytest + Playwright), `debugger`, `code-reviewer`, `doc-writer`; skills: `run-tests` (Full check), `preview-site` (screenshots). Delegate large or noisy work with goal, paths, constraints, and output format; do small edits yourself.
+The `orchestrator` agent (`claude --agent orchestrator`) plans, delegates, verifies, and summarizes; only it delegates (other agents have no Agent tool). Agents: `implementer` (code), `test-writer` (pytest + Playwright), `debugger`, `code-reviewer`, `doc-writer`; skills: `run-tests` (Full check), `preview-site` (screenshots). Delegate large or noisy work with goal, paths, constraints, and output format; do small edits yourself.
 
 1. Understand; ask if ambiguous; plan briefly for 3+ files or a public interface.
 2. The smallest change that works. No new tests unless the user asks.
