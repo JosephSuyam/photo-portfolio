@@ -5,7 +5,9 @@ import { timingSafeEqual } from "node:crypto";
 // Must stay below the debounce sleep in .github/workflows/deploy.yml, so a run this recent
 // has not synced yet and will include the change.
 const THROTTLE_SECONDS = 60;
-// Per warm instance; saves the GitHub check (and its rate limit) during long bursts.
+// Per warm instance (shared by concurrent requests only on Vercel Fluid compute). Claimed
+// before any await: each Drive change arrives once per live channel, all at the same moment,
+// before GitHub lists the run the first one starts.
 let lastDispatchAt = 0;
 
 function tokenMatches(received, expected) {
@@ -53,10 +55,11 @@ export async function POST(request) {
     "X-GitHub-Api-Version": "2022-11-28",
   };
   // Drive sends one notification per file change and channel; one run per minute is enough.
-  if (
-    Date.now() - lastDispatchAt < THROTTLE_SECONDS * 1000 ||
-    (await recentDispatchRunExists(GITHUB_REPO, headers))
-  ) {
+  if (Date.now() - lastDispatchAt < THROTTLE_SECONDS * 1000) {
+    return new Response("OK", { status: 200 });
+  }
+  lastDispatchAt = Date.now();
+  if (await recentDispatchRunExists(GITHUB_REPO, headers)) {
     return new Response("OK", { status: 200 });
   }
   let response;
@@ -65,15 +68,17 @@ export async function POST(request) {
       method: "POST",
       headers,
       body: JSON.stringify({ event_type: "drive-changed" }),
+      signal: AbortSignal.timeout(10000),
     });
   } catch (error) {
     console.error(`GitHub dispatch failed: ${error.name}`);
+    lastDispatchAt = 0;
     return new Response("Dispatch failed", { status: 502 });
   }
   if (!response.ok) {
     console.error(`GitHub dispatch failed with status ${response.status}`);
+    lastDispatchAt = 0;
     return new Response("Dispatch failed", { status: 502 });
   }
-  lastDispatchAt = Date.now();
   return new Response("OK", { status: 200 });
 }
