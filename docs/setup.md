@@ -44,7 +44,7 @@ The form posts `name`, `email`, and `message`, plus an empty hidden honeypot fie
 
 ## Instant redeploy on Drive changes (optional)
 
-Without this, the Deploy workflow picks up Drive changes on its 12-hour schedule. With it, a Drive change redeploys within about a minute: Drive push channel -> Vercel function `/api/drive-webhook` (built from `src/portfolio/api/drive-webhook.mjs` into `dist/api/`) -> GitHub `repository_dispatch` event `drive-changed` -> Deploy workflow. Every push, manual, or scheduled Deploy run (the 12-hour schedule stays as a fallback; webhook-triggered runs skip this) renews the channel with `portfolio subscribe`; each channel lasts 24 hours, so it survives long gaps in GitHub's schedule.
+Without this, the Deploy workflow picks up Drive changes on its 12-hour schedule. With it, the site starts redeploying about 3 minutes after the last Drive change: Drive push channel -> Vercel function `/api/drive-webhook` (built from `src/portfolio/api/drive-webhook.mjs` into `dist/api/`) -> GitHub `repository_dispatch` event `drive-changed` -> Deploy workflow. Every push, manual, or scheduled Deploy run (the 12-hour schedule stays as a fallback; webhook-triggered runs skip this) renews the channel with `portfolio subscribe`; each channel lasts 24 hours, so it survives long gaps in GitHub's schedule.
 
 1. Generate a random token of at most 256 characters, e.g. `openssl rand -hex 32`.
 2. Create a fine-grained GitHub personal access token for this repository only, with **Contents: Read and write**.
@@ -56,9 +56,10 @@ Without this, the Deploy workflow picks up Drive changes on its 12-hour schedule
    - secret `DRIVE_WEBHOOK_TOKEN`: the same token as `WEBHOOK_TOKEN`
    - variable `DRIVE_WEBHOOK_URL`: `https://<site-domain>/api/drive-webhook`. The function sits at the deployment root, even when `SITE_BASE_URL` has a path.
 5. Deploy once so the function exists. Then set `DRIVE_WEBHOOK_URL` and `DRIVE_WEBHOOK_TOKEN` in `.env` (see `.env.example`) and run `uv run portfolio subscribe`, or start the Deploy workflow by hand (Actions -> Deploy -> Run workflow on `main`).
-6. Check: change something in Drive. A Deploy run with event `repository_dispatch` should start within about a minute.
+6. Check: change something in Drive. A Deploy run with event `repository_dispatch` should start within about a minute, and its `deploy` job about 3 minutes later.
 
 Notes:
+- Many Drive changes in a row (e.g. deleting photos, then a bulk upload) deploy once. Each change starts a Deploy run whose `debounce` job waits 3 minutes; a newer change cancels it. Only the run after 3 quiet minutes deploys, so cancelled runs are expected. A pause longer than 3 minutes within one batch deploys twice; a steady stream of changes waits until it stops (the 12-hour schedule still deploys).
 - `repository_dispatch` runs on the repository's default branch, which must be `main`.
 - Drive also notifies about changes outside the portfolio folder. Runs with no Drive or code change skip the build and deploy.
 - The endpoint answers 403 to requests without the token.
