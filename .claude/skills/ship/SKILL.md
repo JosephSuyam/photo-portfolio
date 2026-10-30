@@ -11,8 +11,8 @@ Invoking this skill is the user's approval to push this branch, open its PR into
 1. **Preflight** (stop and report on any failure):
    - `gh auth status`. Not logged in: tell the user to run `gh auth login` themselves (it is interactive).
    - The current branch is not `main` or `develop`, and `git status --short` shows no uncommitted changes to tracked files. Ask about anything unrelated instead of committing it.
-   - `uv run ruff check . && uv run ruff format --check . && uv run mypy src` is green.
    - `git fetch origin develop`. If the branch is behind `origin/develop`, ask before merging or rebasing it.
+   - The `run-tests` Full check (the same steps as CI) is green, so CI is not blocked. Any FAIL or SKIPPED: stop before pushing.
 2. **Push:** `git push -u origin HEAD`.
 3. **PR:** reuse the branch's PR only if `gh pr view --json number,url,state` reports `OPEN`; otherwise `gh pr create --base develop --title "<title>" --body-file .tmp/pr-body.md`.
    - Title: `$ARGUMENTS` if given; otherwise the branch's commit subject (one commit) or a conventional summary of its commits.
