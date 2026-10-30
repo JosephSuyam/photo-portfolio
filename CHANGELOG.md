@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Drive-triggered deploys are debounced: a burst of Drive changes (e.g. deleting photos, then a bulk upload) deploys once, starting about 3 minutes after the last change. Push, scheduled, and manual deploys still start at once.
 - "Portfolio" redesign: a white page (black in dark mode) with Bodoni display headlines over Helvetica text. Every page opens with the site title centered over a spaced uppercase menu, with the theme toggle at the top right. The 1.5 s theme cross-fade is unchanged.
 - Album index: "Work" and the counts centered, then the first album as a full-bleed 21:9 feature (4:5 on phones) with its label, title, and count in white over the photo. The other albums follow edge to edge, two per row in 3:2 frames; a lone last card spans the row at 3:1, the same height. Titles and counts sit on the photos, and hovering a card zooms it slightly (not with reduced motion). Hovering or focusing a card still previews it in the feature.
 - Album pages: justified rows replace the mosaic. Every photo is shown whole at its own aspect ratio, rows share one height, and the last row isn't stretched. Phones get one column.
