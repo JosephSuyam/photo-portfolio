@@ -55,4 +55,4 @@ The `orchestrator` agent (`claude --agent orchestrator`) plans, delegates, verif
 - Windows, Git Bash. Multi-line edits: Edit tool or a script in `.tmp/` (inline heredocs with nested quotes break). Throwaway files go in `.tmp/`.
 
 ## Learning
-Propose a one-line addition here or to an agent/skill when you learn something durable (API quirk, wrong command, flaky-test cause); don't silently rewrite. Keep this file under 85 lines.
+Propose a one-line addition here or to an agent/skill when you learn something durable (API quirk, wrong command, flaky-test cause); don't silently rewrite.
