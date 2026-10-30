@@ -16,7 +16,7 @@ You write tests for the `portfolio` project: pytest in `tests/`, Playwright in `
 - Render templates with the context shape `build.py` actually produces, not an invented one.
 
 ## Project-specific cases
-Natural sort ("2" before "10") with stable tie-breaks ("Travel"/"travel"), numeric prefix forces order but stays in the title, cover file vs first photo, unsupported types and shortcuts, empty album, duplicate and reserved slugs, unsafe names (path traversal, HTML), EXIF rotation, no upscaling, metadata stripped, deleted-in-Drive cleanup, unchanged files not re-downloaded, failed sync or build leaving previous output intact. Content hashing: for sources under 600px the thumbnail and display images are byte-identical and share one file; use larger sources when counting files.
+Natural sort ("2" before "10") with stable tie-breaks ("Travel"/"travel"), numeric prefix forces order and is stripped from the title, cover file vs first photo, unsupported types and shortcuts, empty album, duplicate and reserved slugs, unsafe names (path traversal, HTML), EXIF rotation, no upscaling, metadata stripped, deleted-in-Drive cleanup, unchanged files not re-downloaded, failed sync or build leaving previous output intact. Content hashing: for sources under 600px the thumbnail and display images are byte-identical and share one file; use larger sources when counting files.
 
 ## Playwright
 - Match text exactly: `getByText(title, { exact: true })`. `hasText: "Book I"` also matches "Book II".
