@@ -25,6 +25,7 @@ MANIFEST_NAME = "manifest.json"
 ORIGINALS_DIR = "originals"
 
 _DIGITS = re.compile(r"(\d+)")
+_SORT_PREFIX = re.compile(r"^\d{1,3}(?:[._-]*\s[\s._-]*|[._-]++(?!\d))")
 _NON_SLUG_CHARS = re.compile(r"[^a-z0-9]+")
 _FALLBACK_SLUG = "album"
 _GOOGLE_APPS_MIME_PREFIX = "application/vnd.google-apps."
@@ -43,11 +44,14 @@ def natural_sort_key(name: str) -> tuple[str | int, ...]:
 
 
 def display_title(folder_name: str) -> str:
-    """Album title: the folder name as written, minus surrounding whitespace.
+    """Album title: the trimmed folder name without its sort prefix ("01 Book I" -> "Book I").
 
-    A numeric prefix ("01 Book I") still controls the order but is kept in the title.
+    The prefix is 1-3 digits plus a separator (space, ".", "_", "-"). Without a space the
+    separator must not be followed by a digit, so "1.5 Days" and "2-3 Kids" are kept, as are
+    years ("2020 Trip") and number-only names ("01").
     """
-    return folder_name.strip()
+    name = folder_name.strip()
+    return _SORT_PREFIX.sub("", name) or name
 
 
 def slugify(title: str) -> str:

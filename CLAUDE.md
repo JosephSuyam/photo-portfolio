@@ -18,7 +18,7 @@ A photographer portfolio, generated from a Google Drive folder: root = portfolio
 
 ## Drive conventions
 - Albums: immediate subfolders of the root, natural sort by name ("Book 2" before "Book 10"); a numeric prefix (`01 Book I`) forces order. Deeper nesting ignored; empty albums unpublished.
-- Title: folder name as written (trimmed). Slug from the title (`01-book-i`), unique (`-2`), never `work`, `static`, `images`, `about`, `contact`, or `api`.
+- Title: folder name trimmed, minus a sort prefix (`01 Book I` -> `Book I`; 1-3 digits + space/`.`/`_`/`-`). Slug from the title (`book-i`), unique (`-2`), never `work`, `static`, `images`, `about`, `contact`, or `api`.
 - Photos: JPEG, PNG, WebP, natural sort by filename; other files and shortcuts skipped with a warning. Cover: a `cover.*` file (not shown among photos), else the first photo.
 - Drive lists an unshared folder as **empty**, so sync calls `get_folder(root)` first. Handle pagination and shared drives (`supportsAllDrives=True`). Names and ids are untrusted: sanitize.
 
@@ -48,8 +48,8 @@ The `orchestrator` agent (`claude --agent orchestrator`) plans, delegates, verif
 
 ## Safety
 - Never read, print, or commit `.env`, the service-account key, or tokens; error messages must not echo the key's path or contents. Never commit photos, `.cache/`, or `dist/`. Never write to or delete anything in Drive.
-- `.claude/hooks/guard.py` (PreToolUse) enforces the git, secret, and `dist/`/`.cache/` rules here and makes the user confirm any merge or push into `main`; a block is a rule, not a bug to route around (if it only matched message text, pass the text from a `.tmp/` file with `git commit -F` or `--body-file`).
-- Ask before: deleting files, installing dependencies, merging or pushing (`/ship` approves a feature branch into `develop`; `main` always needs an explicit yes), force-pushing, rewriting history, deploying, or spending paid credits.
+- `.claude/hooks/guard.py` (PreToolUse) enforces the git, secret, and `dist/`/`.cache/` rules here and makes the user confirm any merge or push into `main` unless their latest typed prompt has "deploy to main", "deploy to prod", or "push to main" as its own clause ("ship it, deploy to main"; not "should we deploy to main?"); a block is a rule, not a bug to route around (if it only matched message text, pass the text from a `.tmp/` file with `git commit -F` or `--body-file`).
+- Ask before: deleting files, installing dependencies, merging or pushing (`/ship` approves a feature branch into `develop`; `main` always needs an explicit yes, such as "deploy to main"), force-pushing, rewriting history, deploying, or spending paid credits.
 - CI/CD runs only on pushes to `develop` and `main`, never on feature branches or their PRs (add environment branches to `ci.yml` when they exist). Before any merge or push into them, the `run-tests` Full check must be green locally.
 - Work on feature branches merged into `develop`. Small conventional commits; before committing, check `git status` and leave out unrelated work. Never `git checkout -- .` or reset the main checkout to tidy up: uncommitted work lives there.
 - Windows, Git Bash. Multi-line edits: Edit tool or a script in `.tmp/` (inline heredocs with nested quotes break). Throwaway files go in `.tmp/`.

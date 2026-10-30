@@ -4,7 +4,7 @@
 Portfolio/            <- root folder (DRIVE_ROOT_FOLDER_ID)
   about.json          <- optional, About page at /about/
   contact.json        <- optional, Contact page at /contact/
-  01 Book I/          <- album "01 Book I", URL /01-book-i/
+  01 Book I/          <- album "Book I", URL /book-i/
     cover.jpg         <- album cover
     001.jpg
     002.jpg
@@ -17,11 +17,11 @@ Portfolio/            <- root folder (DRIVE_ROOT_FOLDER_ID)
 - Albums are the immediate subfolders of the root. Deeper folders are ignored.
 - Albums are ordered by folder name, naturally ("Book 2" before "Book 10"). Prefix with numbers (`01 Book I`) to force an order.
 - The index shows one full-screen album after another in that order, numbered "01 / 03" and so on. To choose the first, give it the lowest prefix (`01 Book I`). The album pages' Previous/Next links follow the same order.
-- The album title shown on the site is the folder name exactly as written, prefix included.
+- The album title shown on the site is the folder name without its sort prefix: "01 Book I", "01-Book I", "01_Book I", "01. Book I", and "01 - Book I" all show as "Book I". Only 1 to 3 leading digits followed by a separator count as a prefix, so "2020 Trip", "3D Works", and a number-only name like "01" are shown as written. Without a space, the separator must not be followed by a digit, so "1.5 Days" and "2-3 Kids" are also kept. A title that really starts with a short number ("99 Problems") needs its own prefix: "01 99 Problems" shows as "99 Problems".
 - Photos are ordered by filename, naturally, and the album page shows them in that order in a mosaic of cropped tiles: mostly squares, large and small, plus a few 2:1 tiles where the last photos close the grid; on a phone every tile is square. A tile's size depends on the photo's position, not its shape (in each full group of six, the 1st and 4th are large). Panoramas and tall portraits lose their edges in the mosaic, so keep the subject near the center. Clicking a tile opens the photo whole.
 - The cover is a file named `cover.*`, otherwise the first photo. It is cropped to fill the screen (landscape on a computer, portrait on a phone, where a landscape cover shows only its middle) on the index, at the top of its album page, and in the "Next album" banner of the album before it. The title is set over its lower-left corner and the site menu over its top, so keep the subject near the center and clear of the bottom-left. Clicking the cover on the album page opens it whole.
 - Supported: JPEG, PNG, WebP. Other files and shortcuts are skipped.
-- Each album's URL slug comes from its title ("01 Book I" -> `/01-book-i/`). If two albums share a slug, the later one gets `-2`, `-3`, and so on. `work`, `static`, `images`, `about`, `contact`, and `api` belong to the site, so an album folder named "About" gets `/about-2/` and "Contact" gets `/contact-2/`.
+- Each album's URL slug comes from its title ("Book I" -> `/book-i/`), so it stays the same when you renumber the prefix. If two albums share a slug, the later one gets `-2`, `-3`, and so on. `work`, `static`, `images`, `about`, `contact`, and `api` belong to the site, so an album folder named "About" gets `/about-2/` and "Contact" gets `/contact-2/`.
 - Empty albums are not published.
 - The root folder can live in My Drive or in a shared drive.
 
