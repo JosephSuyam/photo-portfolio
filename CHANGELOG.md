@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Drive-triggered deploys are debounced: a burst of Drive changes (e.g. deleting photos, then a bulk upload) deploys once, starting about 3 minutes after the last change. Push, scheduled, and manual deploys still start at once.
+- Drive-triggered deploys are debounced: a burst of Drive changes (e.g. deleting photos, then a bulk upload) deploys once, starting about 3 minutes after the last change. Push, scheduled, and manual deploys still start at once. The Drive webhook starts about one Deploy run per minute instead of one per notification, so a bulk upload no longer floods GitHub Actions. Existing setups: add **Actions: Read** to the GitHub token used by the webhook (`GITHUB_DISPATCH_TOKEN`).
 - About and Contact: an optional `about.<ext>` / `contact.<ext>` photo (JPEG, PNG, WebP) in the Drive root gives the page a split layout: the photo fills the left half and stays put while the text scrolls (on top on phones), and Contact details become ruled label/value rows. Without a photo the pages stay centered. Older manifests still load.
 - Photo protection (deterrents only): no context menu on photos or the lightbox, no dragging photos, no middle-click or Ctrl/Cmd/Shift/Alt-click opening the raw image (modified clicks open the lightbox), and no iOS long-press save. Photo counts on the index and album pages now include a separate `cover.*` file; a cover identical to a photo counts once.
 - "Cinematic" redesign: heavy uppercase Helvetica titles replace Bodoni, and the header sits over the photos. White text on photos keeps a dark fade behind it in both themes; About and Contact follow the theme. Bodoni Moda (`static/fonts/`) and the hover-preview script are removed.

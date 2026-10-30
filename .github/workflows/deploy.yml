@@ -16,9 +16,9 @@ permissions:
   contents: read
 
 jobs:
-  # A burst of Drive edits (e.g. delete many photos, then bulk upload) sends one dispatch per
-  # change. Each new dispatch cancels the waiting one, so only the run after 3 quiet minutes
-  # deploys.
+  # During a burst of Drive edits (e.g. delete many photos, then bulk upload) the webhook sends
+  # about one dispatch per minute. Each new dispatch cancels the waiting one, so only the last
+  # run deploys.
   debounce:
     if: github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
@@ -27,6 +27,7 @@ jobs:
       group: drive-debounce
       cancel-in-progress: true
     steps:
+      # Keep above THROTTLE_SECONDS in src/portfolio/api/drive-webhook.mjs.
       - name: Wait for Drive to go quiet
         run: sleep 180
 
