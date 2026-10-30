@@ -17,7 +17,7 @@ Environment variables override `.env`. If you edit `.env` while VS Code is open,
 
 ## Photo on About or Contact (optional)
 
-Gives the page a split layout: the photo fills the left half and stays put while the text scrolls; on phones it sits on top.
+Gives the page a split layout: the photo fills the left half beside the text, at most one screen tall; on phones it is a 4:3 band on top.
 
 1. Upload the image to the Drive root, next to `about.json` / `contact.json`, named `about.<ext>` or `contact.<ext>` (JPEG, PNG, or WebP), e.g. `about.jpg`. Case doesn't matter (`About.JPG` works); other names (`about-me.jpg`) don't. More rules: [Drive folder conventions](drive-conventions.md#about-and-contact-pages).
 2. Run `uv run portfolio all`.
