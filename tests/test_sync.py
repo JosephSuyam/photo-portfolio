@@ -110,10 +110,27 @@ def test_natural_sort_key_digits_and_letters_mixed_does_not_raise() -> None:
 
 
 @pytest.mark.parametrize(
-    "folder_name",
-    ["01 Book I", "2-Portraits", "03_Street", "05 - Night", "2020 Trip", "Book 2", "007"],
+    ("folder_name", "title"),
+    [
+        ("01 Book I", "Book I"),
+        ("2-Portraits", "Portraits"),
+        ("03_Street", "Street"),
+        ("05 - Night", "Night"),
+        ("10. Studio", "Studio"),
+        ("001 Archive", "Archive"),
+        ("01 2020 Trip", "2020 Trip"),
+        ("01 10 Things", "10 Things"),
+    ],
 )
-def test_display_title_folder_name_kept_as_written(folder_name: str) -> None:
+def test_display_title_sort_prefix_removed(folder_name: str, title: str) -> None:
+    assert display_title(folder_name) == title
+
+
+@pytest.mark.parametrize(
+    "folder_name",
+    ["2020 Trip", "Book 2", "007", "3D Works", "1.5 Days", "2-3 Kids", "1-800 Flowers"],
+)
+def test_display_title_without_sort_prefix_kept_as_written(folder_name: str) -> None:
     assert display_title(folder_name) == folder_name
 
 
@@ -255,8 +272,8 @@ def test_sync_portfolio_album_has_folder_id_name_title_and_slug(
     assert (album.folder_id, album.name, album.title, album.slug) == (
         "f-book",
         "01 Book I",
-        "01 Book I",
-        "01-book-i",
+        "Book I",
+        "book-i",
     )
 
 
@@ -275,8 +292,8 @@ def test_sync_portfolio_numeric_prefix_forces_album_order(
     for index, name in enumerate(["10 Mid", "Aardvark", "02 Alpha", "01 Zeta", "3 Beta"]):
         drive.add_folder(ROOT, f"f{index}", name)
         drive.add_file(f"f{index}", f"p{index}", "a.jpg")
-    titles = [album.title for album in _sync(drive, cache_dir).albums]
-    assert titles == ["01 Zeta", "02 Alpha", "3 Beta", "10 Mid", "Aardvark"]
+    names = [album.name for album in _sync(drive, cache_dir).albums]
+    assert names == ["01 Zeta", "02 Alpha", "3 Beta", "10 Mid", "Aardvark"]
 
 
 def test_sync_portfolio_files_at_root_not_albums(drive: FakeDriveClient, cache_dir: Path) -> None:
