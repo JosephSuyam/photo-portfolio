@@ -44,10 +44,11 @@ PUSH_ALL = re.compile(r"\bgit\b[^;&|\n]*\bpush\b[^;&|\n]*\s--(all|mirror)\b")
 GH_PR_MERGE = re.compile(r"\bgh\s+pr\s+merge\b([^;&|\n]*)")
 DEPLOY = re.compile(r"\bgh\s+workflow\s+run\b[^;&|\n]*\bdeploy|\bvercel\b[^;&|\n]*\bdeploy\b")
 PROTECTED_BRANCHES = {"main", "develop"}
-# The phrase as its own clause in the user's latest typed prompt approves the main/deploy
-# steps; "don't deploy to prod yet" or "should we deploy to main?" do not.
+# "deploy to main/prod" or "push to main/prod" as its own clause in the user's latest typed
+# prompt approves the main/deploy steps; "don't deploy to prod yet" or "should we deploy to
+# main?" do not.
 DEPLOY_APPROVAL = re.compile(
-    r"(?:^|[,.;:!\n])\s*(?:please\s+)?deploy\s+to\s+(?:prod(?:uction)?|main)(?:\s+please)?"
+    r"(?:^|[,.;:!\n])\s*(?:please\s+)?(?:deploy|push)\s+to\s+(?:prod(?:uction)?|main)(?:\s+please)?"
     r"\s*(?:[,.;!\n]|$)",
     re.IGNORECASE,
 )
