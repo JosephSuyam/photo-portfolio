@@ -636,25 +636,27 @@ html:has(.scenes) { scroll-snap-type: y mandatory; }
   overflow: hidden;
 }
 
-/* About or Contact with a page photo: the photo fills the left half and stays put while the
-   text scrolls; details become ruled rows. Column widths match split_photo_sizes in build.py. */
+/* About or Contact with a page photo: the photo fills the left half and ends where the text
+   ends, at least 60% and at most 100% of the screen tall; past that it stays put while the
+   text scrolls. Details become ruled rows. Column widths match split_photo_sizes in build.py. */
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: start;
 }
 
 .split-photo {
   position: sticky;
   top: 0;
-  height: 100vh;
-  height: 100svh;
+  min-height: 60vh;
+  min-height: 60svh;
+  max-height: 100vh;
+  max-height: 100svh;
   margin: 0;
 }
 
-.split-photo img { width: 100%; height: 100%; object-fit: cover; }
+.split-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
-.split-text { max-width: 760px; padding: 24px clamp(24px, 5vw, 88px) 0; }
+.split-text { max-width: 760px; padding: 24px clamp(24px, 5vw, 88px); }
 
 .split .page-heading { padding: 0; text-align: left; font-size: clamp(48px, 7vw, 112px); }
 
@@ -813,9 +815,9 @@ html:has(.lightbox[open]) { overflow: hidden; }
 
   .split { grid-template-columns: minmax(0, 1fr); }
 
-  .split-photo { position: static; height: 56vh; height: 56svh; }
+  .split-photo { position: relative; min-height: 0; aspect-ratio: 4 / 3; }
 
-  .split-text { padding: 32px 20px 0; }
+  .split-text { padding: 32px 20px 24px; }
 
   .lightbox-image { max-width: 100vw; max-height: calc(100dvh - 140px); }
 

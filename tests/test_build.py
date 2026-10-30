@@ -1980,7 +1980,7 @@ def _split_markup(out: Path, page: str) -> list[Element]:
 @pytest.mark.parametrize(
     ("width", "height", "expected"),
     [
-        (2000, 1000, "(max-width: 767px) 200vw, 113vw"),
+        (2000, 1000, "(max-width: 767px) 150vw, 113vw"),
         (1000, 2000, "(max-width: 767px) 100vw, 50vw"),
     ],
 )

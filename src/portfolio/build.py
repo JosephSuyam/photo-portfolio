@@ -39,10 +39,11 @@ TABLET_MAX_WIDTH_PX = 1024
 SCENE_ASPECT = Fraction(16, 9)
 PHONE_SCENE_ASPECT = Fraction(9, 16)
 
-# About and Contact photo, beside the text: half of a 16:9 window at full height; on a 9:16
-# phone a full-width band 56svh tall, roughly square. Keep in sync with `.split` in site.css.
+# About and Contact photo, beside the text: half of a 16:9 window, 60-100% of its height
+# (8:9 is the tallest, so the largest file); on phones a full-width 4:3 band.
+# Keep in sync with `.split` in site.css.
 SPLIT_PHOTO_ASPECT = Fraction(8, 9)
-PHONE_SPLIT_PHOTO_ASPECT = Fraction(1)
+PHONE_SPLIT_PHOTO_ASPECT = Fraction(4, 3)
 
 # Album page: a gap-free mosaic of cropped tiles on a 4-column grid (2 on tablets, 1 on phones).
 # Photos come in blocks of six that close a 4x3 area; a last partial block uses the remainder
