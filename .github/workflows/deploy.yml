@@ -15,15 +15,34 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: deploy
-  cancel-in-progress: false
-
 jobs:
+  # A burst of Drive edits (e.g. delete many photos, then bulk upload) sends one dispatch per
+  # change. Each new dispatch cancels the waiting one, so only the run after 3 quiet minutes
+  # deploys.
+  debounce:
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: drive-debounce
+      cancel-in-progress: true
+    steps:
+      - name: Wait for Drive to go quiet
+        run: sleep 180
+
   deploy:
+    needs: debounce
+    # Push, schedule, and manual runs skip debounce and deploy at once.
     # workflow_dispatch can target any branch; only main goes to production.
     # repository_dispatch always runs on the default branch, which must be main.
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      ${{ !cancelled()
+      && (needs.debounce.result == 'success' || needs.debounce.result == 'skipped')
+      && github.ref == 'refs/heads/main' }}
+    # Job-level, so a debounce can wait while a deploy runs; a running deploy is never cancelled.
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
     # Secrets and variables live in the "production" environment.
     environment: production
     runs-on: ubuntu-latest
@@ -120,8 +139,7 @@ jobs:
       # renews it, so one stays live across the 12-hour cron (even if GitHub delays a run)
       # and after a failed sync/deploy (the key file is written before sync). Dispatch runs skip it so channels
       # don't pile up with each Drive change. Overlapping channels only send duplicate
-      # notifications, which collapse because `concurrency` keeps one pending run (newer ones
-      # cancel it) and the skip-if-unchanged check.
+      # notifications, which collapse in the debounce job and the skip-if-unchanged check.
       - name: Renew Drive webhook
         if: ${{ !cancelled() && vars.DRIVE_WEBHOOK_URL != '' && github.event_name != 'repository_dispatch' }}
         continue-on-error: true
