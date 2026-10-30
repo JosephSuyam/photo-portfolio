@@ -44,6 +44,15 @@ PUSH_ALL = re.compile(r"\bgit\b[^;&|\n]*\bpush\b[^;&|\n]*\s--(all|mirror)\b")
 GH_PR_MERGE = re.compile(r"\bgh\s+pr\s+merge\b([^;&|\n]*)")
 DEPLOY = re.compile(r"\bgh\s+workflow\s+run\b[^;&|\n]*\bdeploy|\bvercel\b[^;&|\n]*\bdeploy\b")
 PROTECTED_BRANCHES = {"main", "develop"}
+# The phrase as its own clause in the user's latest typed prompt approves the main/deploy
+# steps; "don't deploy to prod yet" or "should we deploy to main?" do not.
+DEPLOY_APPROVAL = re.compile(
+    r"(?:^|[,.;:!\n])\s*(?:please\s+)?deploy\s+to\s+(?:prod(?:uction)?|main)(?:\s+please)?"
+    r"\s*(?:[,.;!\n]|$)",
+    re.IGNORECASE,
+)
+# Turns started by these continue the user's task, so they keep the user's approval.
+NON_USER_TURNS = {"peer", "task-notification", "auto-continuation"}
 
 # Service-account keys are named <project>-<12 hex>.json; .gitignore is broader on purpose.
 SECRET_IN_COMMAND = re.compile(
@@ -154,6 +163,40 @@ def needs_confirmation(command: str, cwd: str) -> str | None:
     return None
 
 
+def latest_prompt(transcript_path: str) -> str:
+    """Text of the user's latest typed prompt, or "" if a turn of unknown origin came after it.
+
+    Only entries that start a turn carry `origin`. Agent reports and notifications are
+    skipped, never read, so their text can never approve a deploy.
+    """
+    try:
+        text = Path(transcript_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    lines = text.splitlines()
+    for line in reversed(lines):
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict) or entry.get("type") != "user" or "origin" not in entry:
+            continue
+        origin = entry.get("origin")
+        kind = origin.get("kind") if isinstance(origin, dict) else None
+        if kind in NON_USER_TURNS:
+            continue
+        if kind != "human" or entry.get("isMeta"):
+            return ""
+        message = entry.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list):
+            content = " ".join(
+                str(block.get("text", "")) for block in content if isinstance(block, dict)
+            )
+        return content if isinstance(content, str) else ""
+    return ""
+
+
 def check_path(tool: str, raw: str, project: Path) -> str | None:
     path = (project / raw).resolve() if not Path(raw).is_absolute() else Path(raw).resolve()
     key = key_path()
@@ -188,6 +231,10 @@ def main() -> int:
         print(f"Blocked by .claude/hooks/guard.py: {reason}.", file=sys.stderr)
         return 2
     confirm = needs_confirmation(command, cwd) if isinstance(command, str) else None
+    transcript = payload.get("transcript_path")
+    if confirm and isinstance(transcript, str):
+        if DEPLOY_APPROVAL.search(latest_prompt(transcript)):
+            confirm = None
     if confirm:
         decision = {
             "hookEventName": "PreToolUse",
