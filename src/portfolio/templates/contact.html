@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from "macros.html" import split_layout %}
 {% set nav_contact_current = true %}
 {% set page_class = "page-text" %}
 {% block title %}Contact | {{ site_title }}{% endblock %}
 {% block content %}
+{% call split_layout(photo) -%}
 <h1 class="page-heading">Contact</h1>
 {% if contact.email %}
 <a class="contact-email" href="mailto:{{ contact.email }}">{{ contact.email }}</a>
@@ -26,4 +28,5 @@
   </form>
 </section>
 {% endif %}
+{%- endcall %}
 {% endblock %}

@@ -1,7 +1,9 @@
 name: CI
+run-name: "[${{ github.ref_name }}] ${{ github.event.head_commit.message }}"
 
+# Only pushes to develop/main (feature branches and their PRs are checked locally by
+# the run-tests Full check); add environment branches here when they exist.
 on:
-  pull_request:
   push:
     branches: [develop, main]
 
@@ -10,7 +12,6 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:

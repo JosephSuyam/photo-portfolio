@@ -1,39 +1,23 @@
 {% extends "base.html" %}
+{% from "macros.html" import picture %}
 {% set nav_work_current = true %}
-{% macro picture(cover, eager=false) %}
-<picture>
-  <source srcset="{{ cover.webp_srcset }}" sizes="{{ cover.sizes }}" type="image/webp">
-  <img src="{{ cover.src }}" srcset="{{ cover.jpeg_srcset }}" sizes="{{ cover.sizes }}"
-       width="{{ cover.width }}" height="{{ cover.height }}" alt=""
-       {% if not eager %}loading="lazy"{% endif %}>
-</picture>
-{% endmacro %}
+{% set page_class = "page-index" %}
 {% block content %}
-<h1 class="page-heading">Work</h1>
-<p class="page-meta">{{ summary }}</p>
-{% if feature %}
-<section class="albums" data-album-preview>
-  <a class="feature" href="{{ base_path }}{{ feature.slug }}/">
-    <div class="feature-frame">{{ picture(feature.cover, eager=true) }}</div>
-    <div class="feature-text">
-      <span class="feature-label">Latest album</span>
-      <h2 class="feature-title">{{ feature.title }}</h2>
-      <p class="feature-count">{{ feature.count }}</p>
-    </div>
-  </a>
-  {% if cards %}
-  <ul class="album-grid">
-    {% for card in cards %}
-    <li class="album-card album-card--span-{{ card.span }}">
-      <a href="{{ base_path }}{{ card.slug }}/" data-feature-sizes="{{ card.feature_sizes }}">
-        <div class="album-frame">{{ picture(card.cover) }}</div>
-        <h2 class="album-title">{{ card.title }}</h2>
-        <p class="album-count">{{ card.count }}</p>
-      </a>
-    </li>
-    {% endfor %}
-  </ul>
-  {% endif %}
+<h1 class="visually-hidden">Work</h1>
+{% if scenes %}
+<section class="scenes">
+  {% for scene in scenes %}
+  <article class="scene">
+    <a href="{{ base_path }}{{ scene.slug }}/">
+      {{ picture(scene.cover, eager=loop.first) }}
+      <span class="scene-number" aria-hidden="true">{{ "%02d" % loop.index }} / {{ "%02d" % loop.length }}</span>
+      <div class="scene-text">
+        <h2 class="scene-title">{{ scene.title }}</h2>
+        <p class="scene-count">{{ scene.count }} &mdash; View album &rarr;</p>
+      </div>
+    </a>
+  </article>
+  {% endfor %}
 </section>
 {% endif %}
 {% endblock %}

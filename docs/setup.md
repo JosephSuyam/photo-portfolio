@@ -15,6 +15,15 @@ A 404 or 403 on the root folder usually means it is not shared with the service 
 
 Environment variables override `.env`. If you edit `.env` while VS Code is open, restart it: its terminals may still carry the old values.
 
+## Photo on About or Contact (optional)
+
+Gives the page a split layout: the photo fills the left half and stays put while the text scrolls; on phones it sits on top.
+
+1. Upload the image to the Drive root, next to `about.json` / `contact.json`, named `about.<ext>` or `contact.<ext>` (JPEG, PNG, or WebP), e.g. `about.jpg`. Case doesn't matter (`About.JPG` works); other names (`about-me.jpg`) don't. More rules: [Drive folder conventions](drive-conventions.md#about-and-contact-pages).
+2. Run `uv run portfolio all`.
+
+The page needs its `.json` too; a photo alone creates no page. To remove the photo, delete it from Drive and run `uv run portfolio all` again: the page goes back to the centered layout.
+
 ## Contact form (optional)
 
 Adds a "Send a message" form to the Contact page. The site is static, so a form service receives the messages. The Contact page needs a usable `contact.json`; without one, `portfolio build` warns that the form is not shown.
@@ -28,16 +37,17 @@ Adds a "Send a message" form to the Contact page. The site is static, so a form 
 
    Only `https://` URLs are accepted. Otherwise `portfolio sync` and `portfolio build` stop with `CONTACT_FORM_URL must be an https:// URL.`
 3. Restart VS Code if it injects `.env`, then run `uv run portfolio build`.
+   For the deployed site, also add a variable `CONTACT_FORM_URL` with the same endpoint in the GitHub `production` environment: the Deploy workflow reads it from there, not from `.env`.
 4. To remove the form, unset `CONTACT_FORM_URL` and build again: the Contact page then shows links only.
 
 The form posts `name`, `email`, and `message`, plus an empty hidden honeypot field `_gotcha` that spam bots tend to fill in. The endpoint is visible in the page's HTML, as with any form. The service's free-tier limits, cost, and where it stores visitor messages are your choice and responsibility. Tests never call the service.
 
 ## Instant redeploy on Drive changes (optional)
 
-Without this, the Deploy workflow picks up Drive changes on its hourly schedule. With it, the site starts redeploying about 3 minutes after the last Drive change: Drive push channel -> Vercel function `/api/drive-webhook` (built from `src/portfolio/api/drive-webhook.mjs` into `dist/api/`) -> GitHub `repository_dispatch` event `drive-changed` -> Deploy workflow. Every push, manual, or scheduled Deploy run (the hourly schedule stays as a fallback; webhook-triggered runs skip this) renews the channel with `portfolio subscribe`; each channel lasts 24 hours, so it survives long gaps in GitHub's schedule.
+Without this, the Deploy workflow picks up Drive changes on its 12-hour schedule. With it, the site starts redeploying about 3 minutes after the last Drive change: Drive push channel -> Vercel function `/api/drive-webhook` (built from `src/portfolio/api/drive-webhook.mjs` into `dist/api/`) -> GitHub `repository_dispatch` event `drive-changed` -> Deploy workflow. Every push, manual, or scheduled Deploy run (the 12-hour schedule stays as a fallback; webhook-triggered runs skip this) renews the channel with `portfolio subscribe`; each channel lasts 24 hours, so it survives long gaps in GitHub's schedule.
 
 1. Generate a random token of at most 256 characters, e.g. `openssl rand -hex 32`.
-2. Create a fine-grained GitHub personal access token for this repository only, with **Contents: Read and write**.
+2. Create a fine-grained GitHub personal access token for this repository only, with **Contents: Read and write** and **Actions: Read** (the function checks for recent Deploy runs).
 3. In the Vercel project, add these Production environment variables:
    - `WEBHOOK_TOKEN`: the token from step 1
    - `GITHUB_DISPATCH_TOKEN`: the access token from step 2
@@ -49,7 +59,7 @@ Without this, the Deploy workflow picks up Drive changes on its hourly schedule.
 6. Check: change something in Drive. A Deploy run with event `repository_dispatch` should start within about a minute, and its `deploy` job about 3 minutes later.
 
 Notes:
-- Many Drive changes in a row (e.g. deleting photos, then a bulk upload) deploy once. Each change starts a Deploy run whose `debounce` job waits 3 minutes; a newer change cancels it. Only the run after 3 quiet minutes deploys, so cancelled runs are expected. A pause longer than 3 minutes within one batch deploys twice; a steady stream of changes waits until it stops (the hourly schedule still deploys).
+- Many Drive changes in a row (e.g. deleting photos, then a bulk upload) deploy once. Drive sends a notification per file change, but the function starts about one Deploy run per minute: it skips the dispatch when a Drive-triggered run started less than 60 seconds ago, since that run has not synced yet. If that check fails, it dispatches anyway and logs `Recent-run check failed` in the Vercel function logs (e.g. a token without **Actions: Read**). Each run's `debounce` job waits 3 minutes and a newer run cancels it, so only the last run deploys, 2 to 3 minutes after the last change; a few cancelled runs per burst are expected. A pause of about 2 minutes or more within one batch can deploy twice; a steady stream of changes waits until it stops (the 12-hour schedule still deploys).
 - `repository_dispatch` runs on the repository's default branch, which must be `main`.
 - Drive also notifies about changes outside the portfolio folder. Runs with no Drive or code change skip the build and deploy.
 - The endpoint answers 403 to requests without the token.

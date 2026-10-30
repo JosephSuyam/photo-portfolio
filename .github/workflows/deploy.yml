@@ -4,8 +4,9 @@ on:
   push:
     branches: [main]
   schedule:
-    # Hourly keeps a private repo well inside the free Actions minutes.
-    - cron: "0 * * * *"
+    # Every 12 hours: a fallback sync that renews the 24-hour Drive webhook channel in time
+    # while keeping only ~2 channels live (each one POSTs on every Drive change).
+    - cron: "0 */12 * * *"
   workflow_dispatch:
   # Sent by the Vercel function api/drive-webhook.mjs when Drive reports a change.
   repository_dispatch:
@@ -15,9 +16,9 @@ permissions:
   contents: read
 
 jobs:
-  # A burst of Drive edits (e.g. delete many photos, then bulk upload) sends one dispatch per
-  # change. Each new dispatch cancels the waiting one, so only the run after 3 quiet minutes
-  # deploys.
+  # During a burst of Drive edits (e.g. delete many photos, then bulk upload) the webhook sends
+  # about one dispatch per minute. Each new dispatch cancels the waiting one, so only the last
+  # run deploys.
   debounce:
     if: github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
@@ -26,6 +27,7 @@ jobs:
       group: drive-debounce
       cancel-in-progress: true
     steps:
+      # Keep above THROTTLE_SECONDS in src/portfolio/api/drive-webhook.mjs.
       - name: Wait for Drive to go quiet
         run: sleep 180
 
@@ -135,8 +137,8 @@ jobs:
           key: portfolio-cache-${{ github.run_id }}
 
       # `portfolio subscribe` opens a 24-hour channel. Every run except webhook-triggered ones
-      # renews it, so one stays live through hours-long cron gaps and after a failed
-      # sync/deploy (the key file is written before sync). Dispatch runs skip it so channels
+      # renews it, so one stays live across the 12-hour cron (even if GitHub delays a run)
+      # and after a failed sync/deploy (the key file is written before sync). Dispatch runs skip it so channels
       # don't pile up with each Drive change. Overlapping channels only send duplicate
       # notifications, which collapse in the debounce job and the skip-if-unchanged check.
       - name: Renew Drive webhook

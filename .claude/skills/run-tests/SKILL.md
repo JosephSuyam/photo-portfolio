@@ -1,6 +1,6 @@
 ---
 name: run-tests
-description: Run the project's Full check (ruff, mypy, pytest, TypeScript typecheck, Playwright) and report results. Use to verify any change before calling it done.
+description: Run the project's Full check (ruff, ruff format, mypy, pytest, TypeScript typecheck, Playwright) and report results. Use to verify any change before calling it done.
 ---
 
 # Run tests
@@ -8,16 +8,18 @@ description: Run the project's Full check (ruff, mypy, pytest, TypeScript typech
 Run the **Full check** below. From the repo root, run each step separately with the Bash tool, all of them even if one fails, so every problem is reported at once:
 
 1. `uv run ruff check .`
-2. `uv run mypy src`
-3. `uv run pytest -q`
-4. `npm run typecheck`
-5. `npm run test:e2e` (about 30s; builds a fixture site and serves it on port 8123, so port 8000 and a running `portfolio serve` are unaffected). Filter `[WebServer]` lines out of the output.
+2. `uv run ruff format --check .`
+3. `uv run mypy src`
+4. `uv run pytest -q`
+5. `npm run typecheck`
+6. `npm run test:e2e` (about 30s; builds a fixture site and serves it on port 8123, so port 8000 and a running `portfolio serve` are unaffected). Filter `[WebServer]` lines out of the output.
 
 If `uv` or `npm` is missing, or `node_modules/` is absent, report that step as SKIPPED with the reason. Never install anything yourself.
 
 ## Report
 ```
 ruff:       PASS | FAIL (<n> errors)
+format:     PASS | FAIL (<n> files)
 mypy:       PASS | FAIL (<n> errors)
 pytest:     PASS (<n> passed) | FAIL (<n> failed, <n> passed)
 typescript: PASS | FAIL (<n> errors) | SKIPPED (<reason>)
