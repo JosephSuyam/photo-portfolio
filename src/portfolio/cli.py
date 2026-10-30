@@ -182,8 +182,8 @@ WEBHOOK_TTL_SECONDS = 24 * 60 * 60
 def subscribe() -> None:
     """Point Drive change notifications at DRIVE_WEBHOOK_URL for the next 24 hours.
 
-    Every deploy workflow run renews it, so a channel stays live through long gaps
-    between scheduled runs.
+    Scheduled and manual Deploy runs renew it (every 12 hours), so a channel stays live
+    through long gaps between scheduled runs.
     """
     try:
         settings = load_settings()
